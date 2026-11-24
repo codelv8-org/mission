@@ -1,21 +1,7 @@
-# Security and release checklist
+# Security
 
-## Trust boundary
-Browser code is untrusted. Every data request independently verifies a Google JWT signature against Google's JWKS using jose, with RS256, issuer, audience, expiration, issued-at, verified email and subject checks. Access is denied unless an explicit allowlist entry matches. Email-based access requires Google-authoritative Gmail or Workspace identity; subject IDs are preferred for durable identity. Bearer tokens remain in memory, are never sent to GitHub, and are cleared on sign-out/expiry. No session cookie is used. Sign-out is local, not Google account revocation.
-
-Only the configured repository list is queried, with a server-side read-only token. No arbitrary proxy URL, mutation endpoints, or raw GitHub response passthrough. CORS is exact-origin and is supplementary, not authentication. Responses are no-store; do not log tokens, commit messages or private issue contents. Frontend renders all upstream text with DOM textContent.
-
-## Release checks
-- [ ] Google OAuth web client and audience configured.
-- [ ] Exact production origin configured on both Google and Worker.
-- [ ] Only intended email/subject allowlist configured (no wildcard).
-- [ ] PAT limited to approved repository selection and read-only permissions.
-- [ ] Worker secrets set out of Git; token absent from frontend, repository and logs.
-- [ ] Actual Google sign-in: allowlisted account 200, other account 403.
-- [ ] Missing, expired, malformed, wrong-audience and forged tokens denied.
-- [ ] API response cannot be read from a disallowed origin.
-- [ ] Refresh, sign-out, expiry and upstream failure tested.
-- [ ] Dedicated origin and rate limiting reviewed for production.
-- [ ] Public Pages inspected for absence of private data or tokens.
-
-No real OAuth credentials, Cloudflare deployment, or production authentication test is included in the initial commit.
+- All private GitHub data is returned only after server-side Google JWT signature, issuer, audience, expiry, issued-at, verified email and explicit account allowlist verification. Stable Google subjects can also be allowlisted. The application shell is public; no private data in public assets.
+- Google ID token stays in browser memory; local sign-out/expiry clears it. Only public Client ID and origin are generated at /config.js. GitHub PAT remains in /etc/mission/mission.env (root-owned, mode 600). Never commit this file. Only explicitly configured repository names are queried with read-only permissions. API responses are no-store.
+- Node binds only to 127.0.0.1:3107. aaPanel HTTPS reverse proxy is the sole public entry. Exact static asset routes prevent accidental disclosure of environment/source files. Cross-origin API requests are rejected; origin checks are supplemental, not authentication.
+- Production deployment uses a separate non-root account and restricted Ed25519 key, verified SSH host key, no PR deployment and current-main-only commits. Restrict write access to main/workflow files; trusted deployed code can access runtime secrets. Keep Node and OS packages patched. Review deployment scripts before installing as root.
+- Release gates: CI tests, deploy-side tests, local service health, authorized and unauthorized real Google logins, no-token API 401, denied cross-origin requests, GitHub least-privilege and error handling. Local health checks are not end-to-end tests. Review rate limits and retention before larger rollout.

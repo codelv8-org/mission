@@ -1,45 +1,26 @@
 # MISSION — Developer Mission Control
 
-A private-data workspace with a public GitHub Pages application shell.
+Google-authenticated GitHub portfolio and activity workspace. Deployment target: **aaPanel (Ubuntu/Debian), Node.js 22+, Nginx reverse proxy, systemd, GitHub Actions**. Cloudflare Worker and GitHub Pages are no longer required.
 
 ## MVP
-- Google Identity Services sign-in with a server-verified ID token and explicit account allowlist.
-- Read-only monitoring of up to 8 explicitly configured GitHub repositories.
-- Overview, recent activity (7/30 days), repository status and issue priorities derived from GitHub labels (P0–P3 / priority:high / critical / blocked).
-- Partial upstream failures are displayed; no demo data or invented progress.
-- No credentials or private snapshots in the static site. No token persistence in browser storage.
+Overview, recent Activity Timeline (7/30 days), Priority Queue from P0–P3/blocked labels, repository portfolio and GitHub read-only monitoring of up to eight configured repositories. Google ID tokens are verified on the server using jose with an explicit verified account allowlist. Public frontend shell contains no private GitHub data or credentials. No database, background sync, or write access.
 
-## Deployment (required before sign-in works)
+## One-time deployment
 
-1. Google Auth Platform: configure Branding and Audience. Create a Web application OAuth client at https://console.cloud.google.com/auth/clients. Add the authorized JavaScript origin `https://codelv8-org.github.io` (origin only, not /mission). For a dedicated custom domain add its exact HTTPS origin instead. If in Testing mode, add the intended Google test users. Only the client ID is needed, not a client secret.
-2. Create a fine-grained GitHub PAT for selected repositories only, read-only permissions: Metadata, Contents, Issues, Pull requests, Actions. Organization approval may be required. For repositories across multiple owners, use a GitHub App / separate credentials in a later release; one token cannot necessarily access every owner.
-3. Deploy the Worker:
+Example domain: `mission.codelv8.com`; replace with your actual domain.
 
-       cd worker
-       npm install
-       npm test
-       npx wrangler login
-       npx wrangler deploy
+1. In Google Cloud Console, add `https://mission.codelv8.com` to Authorized JavaScript origins of the existing web OAuth client. No client secret or redirect URI is required for this popup ID-token flow. Keep test users configured if needed.
+2. Prepare a fine-grained read-only GitHub PAT for selected repositories (Metadata, Contents, Issues, Pull requests, Actions). Do not paste it into chat, commit it, or add it to the deployment workflow.
+3. Follow [aaPanel deployment guide](deploy/README.md). Set the Google client ID, authorized email(s), PAT and repository list once in `/etc/mission/mission.env` on the host. The browser receives only its public config dynamically.
+4. Create an HTTPS aaPanel reverse proxy to `http://127.0.0.1:3107`. Enable TLS; ensure the port is available. Disable proxy caching for this site and set a read timeout of at least 120s. Do not point a public web root to the source directory.
+5. Configure the restricted deployment SSH key and host verification in GitHub Actions, then run the workflow manually once. Subsequent pushes to main auto-test and deploy.
 
-   In the Worker dashboard or using `npx wrangler secret put NAME`, set:
-   - GOOGLE_CLIENT_ID: the exact OAuth web client ID.
-   - GOOGLE_ALLOWED_EMAILS: comma-separated exact verified Gmail or Google Workspace email addresses. Empty = deny. Do not use a whole-domain wildcard.
-   - GOOGLE_ALLOWED_SUBS: optional comma-separated Google subject identifiers (stable IDs). Either explicit allowlist can grant access.
-   - GITHUB_TOKEN: fine-grained read-only token.
-   - GITHUB_REPOSITORIES: comma-separated owner/repo values, up to 8.
+Disable the old Pages publication in Settings → Pages; the old public shell does not contain production data. Do not serve the same configuration on an unrelated origin.
 
-   The public ALLOWED_ORIGIN in worker/wrangler.toml must match the frontend origin exactly. Set it before deploying if using a custom domain. Prefer a dedicated origin for production rather than sharing github.io origin with other projects.
-4. Edit docs/config.js with the Google client ID and deployed HTTPS Worker origin (no path or trailing slash required). These values are public, not secrets.
-5. GitHub repo Settings → Pages → Deploy from a branch → main → /docs → Save. Expected site: https://codelv8-org.github.io/mission/ . This requires repository admin action; committing files alone does not enable Pages.
-6. Verify authorized account login succeeds, unauthorized account receives 403, unauthenticated API receives 401, unconfigured backend fails closed, and GitHub partial errors are visible. See SECURITY.md.
+## Local development
+`npm install`, `npm test`. The server requires valid environment configuration before starting; production service binds to localhost only.
 
-## Scope and limits
-This is a read-only MVP. Issue priorities are derived from labels, not edited in GitHub. Commits are from the default branch, pull requests from the latest updated page, workflow runs from the latest page. The timeline is a bounded recent sample, not a complete audit history. The priority queue is separately loaded from the latest 100 open issue/PR results per repository (PRs excluded) regardless of age; it is not a complete backlog for larger repositories. It does not infer an active AI agent merely from a commit. No background synchronization, database, or AI summaries yet. Refreshes consume GitHub API quota.
+## Scope
+The timeline is a bounded recent sample from the default branch commits, latest updated PRs/issues, and workflow runs. The priority queue is a separate sample of the latest 100 open issue/PR results per repository with PRs excluded, irrespective of age. This is not a full audit or complete backlog. One PAT may not cover several resource owners; future GitHub App support can address that. Private data is protected by the API; login shell and client-side assets are public by design. The eight-repository bound remains for latency and GitHub quotas, not a Cloudflare limit.
 
-The GitHub Pages HTML/CSS/JS are public, even before login. Only the API/data is protected. If all frontend assets themselves must be private, deploy the frontend on a host with server/edge authentication (e.g. Cloudflare Access with a protected origin, no public bypass); do not publish them on public Pages.
-
-## References
-- https://docs.github.com/en/pages/getting-started-with-github-pages/configuring-a-publishing-source-for-your-github-pages-site
-- https://developers.google.com/identity/gsi/web/guides/verify-google-id-token
-- https://developers.google.com/identity/gsi/web/guides/get-google-api-clientid
-- https://developers.cloudflare.com/workers/configuration/secrets/
+See [SECURITY.md](SECURITY.md).

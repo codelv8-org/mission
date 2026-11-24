@@ -1,5 +1,5 @@
 import {createRemoteJWKSet,jwtVerify} from "jose";
-import {accountAllowed,configuredRepos,priority,split} from "./policy.js";
+import {accountAllowed,configuredRepos,priority,split} from "./policy.mjs";
 const keys=createRemoteJWKSet(new URL("https://www.googleapis.com/oauth2/v3/certs"));
 const originFor=(request,env)=>request.headers.get("Origin")===env.ALLOWED_ORIGIN&&env.ALLOWED_ORIGIN ? env.ALLOWED_ORIGIN : "";
 function headers(origin){

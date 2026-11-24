@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import {accountAllowed,configuredRepos,priority} from "../src/policy.js";
-import worker from "../src/index.js";
+import {accountAllowed,configuredRepos,priority} from "../policy.mjs";
+import worker from "../api.mjs";
 const env={GOOGLE_ALLOWED_EMAILS:"owner@gmail.com",GOOGLE_CLIENT_ID:"example.apps.googleusercontent.com",GITHUB_TOKEN:"test-token",GITHUB_REPOSITORIES:"org/repo",ALLOWED_ORIGIN:"https://codelv8-org.github.io"};
 const account={email:"owner@gmail.com",email_verified:true,sub:"123"};
 test("explicit verified allowlist only",()=>{assert.equal(accountAllowed(account,env),true);assert.equal(accountAllowed({...account,email_verified:false},env),false);assert.equal(accountAllowed({...account,email:"stranger@gmail.com"},env),false);assert.equal(accountAllowed({...account,email:"owner@other.example"},{GOOGLE_ALLOWED_EMAILS:"owner@other.example"}),false);assert.equal(accountAllowed(account,{}),false);assert.equal(accountAllowed(account,{GOOGLE_ALLOWED_SUBS:"123"}),true);});
