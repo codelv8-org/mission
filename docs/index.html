@@ -4,14 +4,13 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="referrer" content="no-referrer">
-<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self'; frame-src 'none'; connect-src 'self' https:; img-src 'self' data:; object-src 'none'; base-uri 'none'; form-action 'none'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self'; frame-src 'none'; connect-src https://api.github.com; img-src 'self' data:; object-src 'none'; base-uri 'none'; form-action 'none'">
 <meta name="robots" content="noindex,nofollow">
 <title>Mission — Developer Mission Control</title>
 <link rel="icon" href="./mark.svg" type="image/svg+xml">
 <link rel="stylesheet" href="./style.css">
 <link rel="stylesheet" href="./auth.css">
-<script src="./config.js" defer></script>
-<script src="./app.js" defer></script>
+<script type="module" src="./app.js"></script>
 </head>
 <body>
 <section id="login" class="login">
@@ -22,9 +21,15 @@
     </div><small>CODELV8 / PRIVATE WORKSPACE</small>
   </aside>
   <main class="login-main"><div class="login-panel">
-    <div class="eyebrow">SECURE WORKSPACE</div><h2>Welcome to Mission.</h2><p class="muted">เข้าสู่ระบบด้วยบัญชี GitHub ที่ได้รับอนุญาต</p>
-    <div class="google-button"><button id="github-login" class="btn primary github-login" disabled><svg aria-hidden="true" viewBox="0 0 24 24" width="20" height="20" fill="currentColor"><path d="M12 .75a11.25 11.25 0 0 0-3.56 21.92c.56.1.77-.24.77-.54v-2.1c-3.13.68-3.79-1.33-3.79-1.33-.51-1.3-1.25-1.65-1.25-1.65-1.02-.7.08-.69.08-.69 1.13.08 1.72 1.15 1.72 1.15 1 .72 2.62.51 3.26.39.1-.73.39-1.22.71-1.5-2.5-.28-5.12-1.25-5.12-5.56 0-1.23.44-2.23 1.15-3.02-.12-.28-.5-1.43.11-2.98 0 0 .95-.3 3.1 1.15a10.77 10.77 0 0 1 5.64 0c2.15-1.45 3.1-1.15 3.1-1.15.61 1.55.23 2.7.11 2.98.72.79 1.15 1.79 1.15 3.02 0 4.32-2.63 5.27-5.14 5.55.4.35.77 1.04.77 2.1v3.64c0 .3.2.65.78.54A11.25 11.25 0 0 0 12 .75Z"/></svg> Sign in with GitHub</button></div><p id="auth-message" role="status" class="auth-message">กำลังตรวจสอบการตั้งค่า...</p>
-    <div class="security-note">◈ &nbsp; Read-only access to repositories permitted by your GitHub account and the Mission GitHub App.</div>
+    <div class="eyebrow">SECURE WORKSPACE</div><h2>Welcome to Mission.</h2><p class="muted">เชื่อมต่อด้วย GitHub Fine-grained Personal Access Token</p>
+    <div class="pat-form">
+      <label for="pat-input">Personal Access Token</label>
+      <input id="pat-input" type="password" autocomplete="off" autocapitalize="off" spellcheck="false" maxlength="512" placeholder="github_pat_..." aria-describedby="pat-hint">
+      <p id="pat-hint" class="muted">ใช้ Fine-grained PAT ที่มีสิทธิ์ Read-only เฉพาะ Repository ที่ต้องการ</p>
+      <button id="github-login" class="btn primary github-login" type="button">Connect GitHub</button>
+      <a class="token-link" href="https://github.com/settings/personal-access-tokens/new" target="_blank" rel="noopener noreferrer">Create a fine-grained token ↗</a>
+    </div><p id="auth-message" role="status" class="auth-message"></p>
+    <div class="security-note">◈ &nbsp; Token stays in memory for this session and is sent only to api.github.com. GitHub Pages itself is public. Never use a broad or write-enabled token.</div>
   </div></main>
 </section>
 <div id="workspace" class="shell" hidden>
@@ -42,7 +47,7 @@
   <main class="main">
     <header class="topbar"><div class="crumb">Workspace <span>/</span> <strong id="view-title">Overview</strong></div><div class="account"><span id="account-login"></span><button id="logout" class="btn">Sign out</button></div></header>
     <div class="content">
-      <section class="page-title"><div><div class="eyebrow">MISSION / CONTROL</div><h1 id="headline">Your work, in focus.</h1><p class="muted">ติดตามโปรเจกต์และวางแผนงานจากข้อมูลจริงบน GitHub</p></div><div class="controls"><label for="period" class="sr-only">ช่วงเวลา</label><select id="period"><option value="7">Last 7 days</option><option value="30">Last 30 days</option></select><button id="refresh" class="btn primary">↻ Refresh</button></div></section>
+      <section class="page-title"><div><div class="eyebrow">MISSION / CONTROL</div><h1 id="headline">Your work, in focus.</h1><p class="muted">ติดตามโปรเจกต์และวางแผนงานจากข้อมูลจริงบน GitHub</p></div><div class="controls"><label for="period" class="sr-only">ช่วงเวลา</label><select id="period"><option value="7">Last 7 days</option><option value="30">Last 30 days</option></select><button id="manage-repos" class="btn" type="button">Manage repositories</button><button id="refresh" class="btn primary">↻ Refresh</button></div></section>
       <div class="filters"><label for="repo-filter">Repository</label><select id="repo-filter"><option value="">All repositories</option></select><span id="updated" class="muted"></span></div>
       <div id="notice" role="status" class="notice" hidden></div>
       <section id="metrics" class="metrics" aria-label="Overview">
@@ -60,6 +65,15 @@
     </div>
   </main>
 </div>
-<noscript>Mission requires JavaScript to sign in and load protected data.</noscript>
+<dialog id="repo-dialog" aria-labelledby="repo-dialog-title">
+  <div class="repo-dialog-head"><div><div class="eyebrow">PORTFOLIO / SELECTION</div><h2 id="repo-dialog-title">Monitor repositories</h2></div><button id="close-repos" class="btn" type="button" aria-label="Close">×</button></div>
+  <p id="repo-dialog-note" class="muted">เลือกได้สูงสุด 20 Repository ต่อการเชื่อมต่อ</p>
+  <label for="repo-search" class="sr-only">Search repositories</label><input id="repo-search" type="search" placeholder="Search repository..." autocomplete="off">
+  <div id="repo-options" class="repo-options"></div>
+  <div class="manual-repo"><label for="repo-manual">ไม่พบ Repository?</label><div class="manual-row"><input id="repo-manual" placeholder="owner/repository" autocomplete="off" maxlength="200"><button id="add-repo" class="btn" type="button">Add</button></div></div>
+  <p id="repo-selection-message" role="status" class="muted"></p>
+  <div class="repo-dialog-foot"><span id="repo-count" class="muted"></span><button id="apply-repos" class="btn primary" type="button">Apply &amp; load</button></div>
+</dialog>
+<noscript>Mission requires JavaScript to connect to GitHub.</noscript>
 </body>
 </html>
