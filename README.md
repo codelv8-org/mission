@@ -18,6 +18,7 @@ No build step or setup variables. The Pages publication source is main /docs. If
 Liquid Glass inspired by [bilalgursen/liquid-glass](https://github.com/bilalgursen/liquid-glass): native CSS/SVG adaptation with no React, WebGL runtime or new build step. See [design system](design-system/mission/MASTER.md).
 
 ## Features
+- Dashboard (analytics bento): project/day activity matrix with event drill-down, daily stacked activity, priority distribution, most-active projects, attention queue, and latest workflow signals. Uses only the already loaded sample; no extra API calls. The 7/30-day view uses UTC calendar days ending at the snapshot time; issue metrics are the current open-issue snapshot. Asterisks and question marks flag incomplete sections; no record is not proof of inactivity. PR, issue and workflow dates reflect latest updates of loaded records, not a complete event history or milestone plan.
 - Overview, Activity Timeline (7/30 days), Priority Queue (labels P0–P3 and blocked), Repository Portfolio.
 - Automatic discovery of up to five pages (500 results); manual additions verify access with GitHub.
 - User identity checked on connection and every dashboard refresh.

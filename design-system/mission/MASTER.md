@@ -13,3 +13,6 @@ Login: deep blue hero, local optical lens SVG, frosted PAT card. Workspace: floa
 
 ## Security and checks
 Existing PAT logic, API client, all runtime IDs and exact CSP stay unchanged. Local assets only. No stored credentials or fabricated live data. Representative color-pair contrast and static contract tests run in Mission CI. Real browser visual QA (especially SVG refraction and backdrop-filter across browsers), live PAT login and deployment should be verified separately.
+
+## Analytics dashboard
+Separate Dashboard navigation entry, retaining Overview. 12-column responsive bento; project timeline spans the width, daily rhythm and priority/focus cards share rows, workflow signals span width. Use compact local SVG charts with accessible daily table, semantic heat intensity plus counts, scrollable native timeline table, day drill-down, explicit missing data marks and no fake completion scores. All analytics derive from current in-memory sample with UTC boundaries, no additional permissions or API requests. Native controls, no inline styles or new scripts from remote origins.

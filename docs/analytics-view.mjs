@@ -1,0 +1,131 @@
+import {analyzeSample,EVENT_TYPES,heatClass,workflowTone} from "./analytics.mjs";
+const $=id=>document.getElementById(id);
+const el=(tag,cls,text)=>{const node=document.createElement(tag);if(cls)node.className=cls;if(text!==undefined)node.textContent=String(text);return node;};
+const TYPES=Object.freeze({commit:"Commit",pull:"Pull request",issue:"Issue update",workflow:"Workflow"});
+const shortDate=date=>new Intl.DateTimeFormat("en-GB",{day:"2-digit",month:"short",timeZone:"UTC"}).format(new Date(date+"T00:00:00Z"));
+const dateTime=at=>Number.isFinite(Date.parse(at))?new Intl.DateTimeFormat("en-GB",{dateStyle:"medium",timeStyle:"short",timeZone:"UTC"}).format(new Date(at))+" UTC":"—";
+const text=(id,value)=>{$(id).textContent=String(value);};
+const boxIds=["project-timeline","activity-trend","activity-legend","daily-counts","priority-breakdown","active-projects","focus-next","workflow-signals","timeline-detail-list"];
+let detail=null;
+function safeLink(title,href){
+  const a=el("a","analysis-link",title||"Untitled");
+  try{const u=new URL(href);if(u.protocol==="https:"&&u.hostname==="github.com"&&!u.username&&!u.password){a.href=u.href;a.target="_blank";a.rel="noopener noreferrer";}}catch{}
+  return a;
+}
+function empty(node,message){node.append(el("p","analysis-empty-note muted",message));}
+function mark(value,partial){return String(value)+(partial?"*":"");}
+function bar(value,max,cls){
+  const meter=el("meter","analysis-meter "+cls);meter.min=0;meter.max=Math.max(1,max);meter.value=value;meter.setAttribute("aria-label",value+" of "+max+" observed records");meter.textContent=value+" / "+max;return meter;
+}
+function displayDetail(model,repo,date){
+  const cell=model.projects.find(p=>p.name===repo)?.cells.find(c=>c.date===date);
+  detail=cell?.events.length?{repo,date}:null;
+  const out=$("timeline-detail-list");out.replaceChildren();
+  $("timeline-clear").hidden=!detail;
+  for(const button of $("project-timeline").querySelectorAll("button[data-day]"))button.setAttribute("aria-pressed",String(!!detail&&button.dataset.day===date&&button.dataset.repo===repo));
+  if(!detail){text("timeline-detail-title","เลือกช่องกิจกรรม");empty(out,"กดช่องที่มีจำนวนกิจกรรมเพื่อดูรายการ");return;}
+  text("timeline-detail-title",repo+" · "+shortDate(date)+" · "+cell.events.length+" events");
+  for(const event of cell.events){
+    const row=el("div","analysis-event"),label=el("span","event-type type-"+event.type,TYPES[event.type]);
+    const body=el("div","analysis-event-body");body.append(safeLink(event.title,event.url),el("p","muted",dateTime(event.at)+(event.status?" · "+event.status:"")));
+    row.append(label,body);out.append(row);
+  }
+}
+function renderTimeline(model){
+  const table=$("project-timeline");table.replaceChildren();table.classList.toggle("timeline-30",model.days===30);
+  const head=el("thead"),hr=el("tr"),repo=el("th","timeline-repo","Repository");repo.scope="col";hr.append(repo);
+  for(const date of model.dates){const th=el("th","timeline-date",shortDate(date));th.scope="col";th.title=date;hr.append(th);}head.append(hr);table.append(head);
+  const body=el("tbody");
+  for(const project of model.projects){
+    const row=el("tr"),label=el("th","timeline-repo");label.scope="row";label.append(el("span","timeline-name",project.name),el("small","muted",project.visibleTotal+" observed"+(project.timelinePartial?" · partial":"")));row.append(label);
+    for(const cell of project.cells){
+      const td=el("td","timeline-cell"),count=cell.events.length,description=project.name+" · "+cell.date+" UTC · "+(count?count+" observed events":project.timelinePartial?"data unavailable or partial":"no observed record")+(count&&project.timelinePartial?" · partial":"");
+      if(count){
+        const button=el("button","heat-cell "+heatClass(count,project.timelinePartial),count+(project.timelinePartial?"*":""));button.type="button";button.dataset.repo=project.name;button.dataset.day=cell.date;button.setAttribute("aria-label",description);button.setAttribute("aria-pressed","false");button.title=description;button.addEventListener("click",()=>displayDetail(model,project.name,cell.date));td.append(button);
+      }else{
+        const cellLabel=el("span","heat-cell "+heatClass(0,project.timelinePartial),project.timelinePartial?"?":"·");cellLabel.title=description;cellLabel.setAttribute("aria-label",description);td.append(cellLabel);
+      }
+      row.append(td);
+    }body.append(row);
+  }table.append(body);
+  displayDetail(model,detail?.repo,detail?.date);
+  $("timeline-clear").onclick=()=>displayDetail(model);
+}
+const NS="http://www.w3.org/2000/svg";
+function svgNode(tag,attrs={},value){const n=document.createElementNS(NS,tag);for(const [k,v] of Object.entries(attrs))n.setAttribute(k,String(v));if(value!==undefined)n.textContent=String(value);return n;}
+function renderTrend(model){
+  const root=$("activity-trend"),legend=$("activity-legend"),daily=$("daily-counts");root.replaceChildren();legend.replaceChildren();daily.replaceChildren();
+  const types=model.type==="all"?EVENT_TYPES:[model.type],max=Math.max(1,...model.daily.map(d=>d.total));
+  if(!model.filteredTotal){empty(root,model.timelinePartial?"ยังไม่มีรายการที่โหลดได้ (ข้อมูลบางส่วนไม่พร้อมใช้งาน)":"ไม่พบกิจกรรมที่โหลดได้ในช่วงเวลานี้");}
+  else{
+    const w=620,h=208,x0=36,y0=168,plotW=570,plotH=145,step=plotW/model.days,bw=Math.min(36,step*.72);
+    const svg=svgNode("svg",{viewBox:"0 0 "+w+" "+h,class:"trend-svg",role:"img","aria-label":"Daily observed activity, "+model.days+" days, UTC, peak "+max+" events. Daily counts available below."});
+    for(const n of [...new Set([0,Math.ceil(max/2),max])].sort((a,b)=>a-b)){const y=y0-n/max*plotH;svg.append(svgNode("line",{x1:x0,y1:y,x2:w-14,y2:y,class:"trend-gridline"}),svgNode("text",{x:x0-7,y:y+4,"text-anchor":"end",class:"trend-label"},n));}
+    model.daily.forEach((day,i)=>{
+      let bottom=y0;const x=x0+i*step+(step-bw)/2;
+      for(const t of types){const count=day.counts[t];if(!count)continue;const height=count/max*plotH;bottom-=height;const r=svgNode("rect",{x,y:bottom,width:bw,height,class:"trend-bar-"+t});r.append(svgNode("title",{},day.date+" · "+TYPES[t]+" · "+count));svg.append(r);}
+      if(model.days===7||i===0||i===model.days-1||i%7===0)svg.append(svgNode("text",{x:x0+(i+.5)*step,y:y0+19,"text-anchor":"middle",class:"trend-label"},day.date.slice(8)));
+    });
+    svg.append(svgNode("text",{x:606,y:201,"text-anchor":"end",class:"trend-label"},"Day (UTC)"));root.append(svg);
+  }
+  for(const type of types){const entry=el("span","trend-legend-item");entry.append(el("span","trend-key trend-bar-"+type),el("span","",TYPES[type]));legend.append(entry);}
+  const table=el("table","daily-table"),head=el("thead"),hr=el("tr");
+  for(const title of ["UTC date",...types.map(t=>TYPES[t]),"Total"]){const th=el("th","",title);th.scope="col";hr.append(th);}head.append(hr);table.append(head);
+  const tb=el("tbody");for(const day of model.daily){const tr=el("tr");for(const value of [day.date,...types.map(t=>t in day.counts?day.counts[t]:0),day.total])tr.append(el("td","",value));tb.append(tr);}table.append(tb);daily.append(table);
+}
+function renderPriority(model){
+  const root=$("priority-breakdown");root.replaceChildren();
+  const top=el("div","breakdown-total");top.append(el("strong","analysis-number",mark(model.issueTotal,model.issuePartial)),el("span","muted","Open issues in sample"));root.append(top);
+  for(const item of model.breakdown){const row=el("div","analysis-bar-row"),label=el("div","analysis-bar-label");label.append(el("span","",item.label),el("strong","",item.count));row.append(label,bar(item.count,model.issueTotal,"meter-"+item.label.toLowerCase()));root.append(row);}
+  root.append(el("div","blocked-line","Blocked: "+mark(model.blocked,model.issuePartial)+" · may overlap priority labels"));
+  text("priority-coverage",(model.issuePartial?"* บาง Repository โหลด Open Issue ไม่สำเร็จ · ":"")+"Open Issue snapshot ปัจจุบัน ไม่เปลี่ยนตามตัวกรอง 7/30 วัน");
+}
+function renderProjects(model,onProject){
+  const root=$("active-projects");root.replaceChildren();
+  const active=[...model.projects].filter(p=>p.total>0).sort((a,b)=>b.total-a.total||a.name.localeCompare(b.name)).slice(0,8);
+  if(!active.length){empty(root,"ไม่พบกิจกรรมที่โหลดได้ในช่วงเวลานี้");return;}
+  for(const p of active){
+    const row=el("div","analysis-bar-row"),label=el("div","analysis-bar-label"),button=el("button","analysis-project-link",p.name);button.type="button";button.setAttribute("aria-label","Filter dashboard to "+p.name);button.addEventListener("click",()=>onProject(p.name));label.append(button,el("strong","",mark(p.total,p.activityPartial)));row.append(label,bar(p.total,active[0].total,"meter-project"),el("small","muted","Latest observed · "+dateTime(p.latest?.at)));root.append(row);
+  }
+}
+function renderFocus(model){
+  const root=$("focus-next");root.replaceChildren();
+  if(!model.focus.length){empty(root,model.issuePartial?"ไม่พบรายการที่โหลดได้ · ข้อมูลบางส่วนไม่พร้อมใช้งาน":"ไม่พบ Issue ที่ติดป้าย Blocked / P0 / P1 ในข้อมูลที่โหลดได้");return;}
+  for(const issue of model.focus.slice(0,8)){
+    const row=el("div","focus-row"),badge=el("span","focus-badge "+(issue.blocked?"focus-blocked":issue.rank===0?"focus-p0":"focus-p1"),issue.blocked?"Blocked":issue.rank===0?"P0":"P1"),body=el("div","analysis-event-body");
+    body.append(safeLink(issue.title,issue.url),el("p","muted",issue.repo+" #"+issue.number+(issue.blocked&&issue.rank<=1?" · P"+issue.rank:"")));row.append(badge,body);root.append(row);
+  }
+  if(model.focus.length>8)root.append(el("p","analysis-foot","Showing 8 of "+model.focus.length+" observed focus issues. See Priority for all loaded issues."));
+}
+function renderWorkflows(model){
+  const root=$("workflow-signals");root.replaceChildren();
+  for(const project of model.projects){
+    const w=project.latestWorkflow,status=w?.status||"unknown",card=el("article","workflow-tile"),head=el("div","workflow-head");
+    head.append(el("strong","",project.name),el("span","workflow-state "+(w?workflowTone(status):"signal-neutral"),w?status.replaceAll("_"," ")+(project.workflowPartial?"*":""):project.workflowPartial?"Unavailable":"No record"));
+    card.append(head);
+    if(w)card.append(safeLink(w.title,w.url),el("p","muted",dateTime(w.at)));else card.append(el("p","muted",project.workflowPartial?"Workflow data unavailable":"No workflow update in loaded window"));
+    root.append(card);
+  }
+}
+export function resetAnalytics(){
+  detail=null;
+  for(const id of boxIds)$(id).replaceChildren();
+  $("analytics-type").value="all";
+  $("timeline-clear").hidden=true;
+  $("timeline-clear").onclick=null;
+  $("analytics-cards").hidden=true;$("analytics-empty").hidden=false;
+  $("analytics-empty").textContent="เชื่อมต่อและโหลด Repository เพื่อดูผลการวิเคราะห์";
+  for(const id of ["analytics-active","analytics-total","analytics-focus-total"])text(id,"—");
+  text("analytics-active-note","");text("analytics-coverage","กำลังรอข้อมูล Repository");text("analytics-period","Project activity · UTC");text("priority-coverage","");text("timeline-detail-title","เลือกช่องกิจกรรม");
+}
+export function renderAnalytics(data,{names=[],filter="",days=7,onProject=()=>{}}={}){
+  if(!data){$("analytics-cards").hidden=true;$("analytics-empty").hidden=false;return;}
+  const model=analyzeSample(data,{names,filter,days,type:$("analytics-type").value});
+  text("analytics-period",shortDate(model.dates[0])+" – "+shortDate(model.dates.at(-1))+" · UTC · "+(filter||"All monitored projects"));
+  text("analytics-coverage",model.loadedCount+" / "+model.projects.length+" repositories loaded"+(model.errors.length?" · "+model.errors.length+" unavailable sections":"")+" · bounded recent sample");
+  $("analytics-empty").hidden=model.projects.length>0;$("analytics-cards").hidden=!model.projects.length;
+  if(!model.projects.length){$("analytics-empty").textContent="ยังไม่มี Repository ในขอบเขตที่เลือก · ใช้ Manage repositories";return;}
+  text("analytics-active",mark(model.active,model.activityPartial));text("analytics-active-note","of "+model.projects.length+" monitored projects · observed activity");
+  text("analytics-total",mark(model.observedTotal,model.activityPartial));text("analytics-focus-total",mark(model.focus.length,model.issuePartial));
+  renderTimeline(model);renderTrend(model);renderPriority(model);renderProjects(model,onProject);renderFocus(model);renderWorkflows(model);
+}

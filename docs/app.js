@@ -1,4 +1,5 @@
 import {createGitHubClient,isFineGrainedPAT,validRepo,MAX_REPOS} from "./github-api.mjs";
+import {renderAnalytics,resetAnalytics} from "./analytics-view.mjs";
 const $=id=>document.getElementById(id);
 let token="",identity=null,data=null,request=null,expiryTimer=null,session=0;
 let available=[],selected=[],draft=new Set(),discoveryNote="";
@@ -22,6 +23,7 @@ function clearSession(msg="ออกจากระบบแล้ว"){
   ["m-repos","m-commits","m-issues","m-priority"].forEach(id=>$(id).textContent="—");
   $("account-login").textContent="";$("updated").textContent="";$("repo-filter").replaceChildren(new Option("All repositories",""));
   $("repo-count").textContent="";$("repo-dialog-note").textContent="เลือกได้สูงสุด "+MAX_REPOS+" Repository ต่อการเชื่อมต่อ";$("repo-search").value="";$("repo-manual").value="";$("repo-selection-message").textContent="";$("pat-input").value="";
+  resetAnalytics();switchView("overview");
   notice("");$("workspace").hidden=true;$("login").hidden=false;$("refresh").disabled=false;$("github-login").disabled=false;$("add-repo").disabled=false;
   message(msg);
 }
@@ -139,7 +141,11 @@ function item(box, icon, title, href, meta, cls="") {
   else badge.append(eventIcon(icon));
   row.append(badge);const body=el("div");body.append(link(title,href),el("div","meta",meta));row.append(body);box.append(row);
 }
+function renderDashboard(){
+  renderAnalytics(data,{names:selected,filter:$("repo-filter").value,days:Number($("period").value),onProject:name=>{if([...$("repo-filter").options].some(o=>o.value===name)){$("repo-filter").value=name;render();}}});
+}
 function render(){
+  if(state.view==="dashboard")renderDashboard();
   if(!data)return;
   const filter=$("repo-filter").value, days=Number($("period").value);
   const match=name=>!filter||filter===name;
@@ -162,15 +168,20 @@ function render(){
   if(!repos.length)empty(rl,"ไม่พบ Repository ที่โหลดสำเร็จ");
 }
 function switchView(view){
-  state.view=view;const names={overview:"Overview",activity:"Timeline",priority:"Priority",repositories:"Repositories"};
+  state.view=view;const names={overview:"Overview",dashboard:"Dashboard",activity:"Timeline",priority:"Priority",repositories:"Repositories"};
   $("view-title").textContent=names[view];$("headline").textContent=view==="overview"?"Your work, in focus.":names[view];
+  $("view-description").textContent=view==="dashboard"?"วิเคราะห์กิจกรรมและสัญญาณของโปรเจกต์จากข้อมูล GitHub ที่โหลดได้":"ติดตามโปรเจกต์และวางแผนงานจากข้อมูลจริงบน GitHub";
   $("metrics").hidden=view!=="overview";
+  $("analytics").hidden=view!=="dashboard";
+  $("panels").hidden=view==="dashboard";
+  if(view==="dashboard")renderDashboard();
   ["activity","priority","repositories"].forEach(v=>$(v+"-panel").hidden=view!=="overview"&&view!==v);
   $("panels").classList.toggle("single",view!=="overview");
   document.querySelectorAll("[data-view]").forEach(b=>{const on=b.dataset.view===view;b.classList.toggle("active",on);if(on)b.setAttribute("aria-current","page");else b.removeAttribute("aria-current");});
 }
 
 document.querySelectorAll("[data-view]").forEach(b=>b.addEventListener("click",()=>switchView(b.dataset.view)));
+$("analytics-type").addEventListener("change",renderDashboard);
 $("period").addEventListener("change",render);$("repo-filter").addEventListener("change",render);
 $("refresh").addEventListener("click",load);$("logout").addEventListener("click",()=>clearSession());
 $("github-login").addEventListener("click",connect);$("pat-input").addEventListener("keydown",e=>{if(e.key==="Enter"&&!e.isComposing){e.preventDefault();connect();}});
@@ -180,7 +191,7 @@ $("apply-repos").addEventListener("click",()=>{
   if(!draft.size||draft.size>MAX_REPOS)return;
   selected=available.filter(r=>draft.has(r.name.toLowerCase())).map(r=>r.name);
   $("repo-dialog").close();
-  data=null;["activity-list","priority-list","repo-list"].forEach(id=>$(id).replaceChildren());
+  data=null;resetAnalytics();["activity-list","priority-list","repo-list"].forEach(id=>$(id).replaceChildren());
   ["m-repos","m-commits","m-issues","m-priority"].forEach(id=>$(id).textContent="—");$("repo-filter").replaceChildren(new Option("All repositories",""));$("updated").textContent="";
   load();
 });
