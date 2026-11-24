@@ -1,4 +1,4 @@
-# MISSION — GitHub Pages PAT Edition (v0.4.2)
+# MISSION — GitHub Pages PAT Edition (v0.4.3)
 
 Developer Mission Control. **GitHub only**: GitHub Pages hosts the frontend; the browser connects directly to the official GitHub REST API using the user's fine-grained personal access token. No backend, Worker, aaPanel, OAuth app, database, external dependencies or external deployment.
 
@@ -15,7 +15,7 @@ Developer Mission Control. **GitHub only**: GitHub Pages hosts the frontend; the
 No build step or setup variables. The Pages publication source is main /docs. If Pages was disabled, enable it in Settings > Pages.
 
 ## Visual design
-Vibrant Claymorphism + Block-based Bento, guided by [UI UX Pro Max](https://github.com/nextlevelbuilder/ui-ux-pro-max-skill) and the approved visual concept. Opaque clay cards, colorful KPI blocks, compact project timeline and daily activity pair, four analysis cards on wide screens. No external dependencies or build step. See [design system](design-system/mission/MASTER.md).
+Neo-Brutalism (Neubrutalism) + responsive Bento, guided by [UI UX Pro Max](https://github.com/nextlevelbuilder/ui-ux-pro-max-skill). Cream canvas, 3px black borders, 5px hard offset shadows, flat yellow/mint/blue/coral/lilac color blocks and mechanical press feedback. No gradients, glass or new runtime dependencies. See [design system](design-system/mission/MASTER.md).
 
 ## Features
 - Dashboard (analytics bento): project/day activity matrix with event drill-down, daily stacked activity, priority distribution, most-active projects, attention queue, and latest workflow signals. Uses only the already loaded sample; no extra API calls. The 7/30-day view uses UTC calendar days ending at the snapshot time; issue metrics are the current open-issue snapshot. Asterisks and question marks flag incomplete sections; no record is not proof of inactivity. PR, issue and workflow dates reflect latest updates of loaded records, not a complete event history or milestone plan.

@@ -1,23 +1,23 @@
-/* Vibrant Clay / forms & native dialog. */
+/* Neo-Brutalism / forms and native dialog. */
 .pat-form { display:grid; gap:12px; margin-top:28px; min-width:0; }
 .pat-form label,.manual-repo label { font-size:14px; font-weight:700; }
-.pat-form input,#repo-search,#repo-manual { width:100%; min-width:0; min-height:48px; border:2px solid var(--control-border); border-radius:16px; padding:11px 14px; color:var(--ink); background:#f1eee9; box-shadow:inset 0 3px 7px #28375a20,inset 0 -2px 4px white; font:inherit; }
+.pat-form input,#repo-search,#repo-manual { width:100%; min-width:0; min-height:48px; border:2px solid var(--ink); border-radius:4px; padding:11px 14px; color:var(--ink); background:var(--paper); box-shadow:none; font:inherit; }
 .pat-form input { font-family:ui-monospace,Consolas,monospace; font-size:16px; }
 input::placeholder { color:var(--muted); opacity:1; }
 .pat-form p { font-size:13px; }
-.github-login { display:flex; align-items:center; justify-content:center; min-height:50px; font-weight:750; width:100%; }
+.github-login { display:flex; align-items:center; justify-content:center; min-height:50px; font-weight:800; width:100%; }
 .token-link { font-size:13px; color:var(--deep); text-align:center; padding:10px 4px; min-height:44px; display:grid; place-items:center; }
-#repo-dialog { width:min(600px,calc(100vw - 24px)); max-width:100%; max-height:calc(100vh - 24px); max-height:calc(100dvh - 24px); border:3px solid var(--edge); border-radius:24px; padding:24px; color:var(--ink); background:var(--surface); box-shadow:0 18px 52px #131e6655,var(--shadow); overflow:auto; }
-#repo-dialog::backdrop { background:#101b4eb0; }
+#repo-dialog { width:min(600px,calc(100vw - 24px)); max-width:100%; max-height:calc(100vh - 24px); max-height:calc(100dvh - 24px); border:3px solid var(--ink); border-radius:4px; padding:24px; color:var(--ink); background:var(--surface); box-shadow:6px 6px 0 var(--ink); overflow:auto; }
+#repo-dialog::backdrop { background:#11111199; }
 .repo-dialog-head,.repo-dialog-foot,.manual-row { display:flex; align-items:center; gap:12px; justify-content:space-between; min-width:0; }
 .repo-dialog-head h2 { margin:6px 0 12px; font-size:26px; line-height:1.2; }
 .repo-dialog-head>div,.repo-dialog-foot>span { min-width:0; overflow-wrap:anywhere; }
 #close-repos { flex:none; width:44px; padding:0; font-size:23px; }
 #repo-search { margin:16px 0 12px; }
-.repo-options { max-height:35vh; overflow:auto; padding:6px; border:2px solid var(--line); border-radius:18px; background:#f1eee9; box-shadow:inset 0 3px 6px #28375a15; }
-.repo-option { display:flex; align-items:center; gap:10px; min-height:48px; margin:6px 0; padding:10px 12px; border:2px solid transparent; border-radius:14px; cursor:pointer; overflow-wrap:anywhere; }
+.repo-options { max-height:35vh; overflow:auto; padding:6px; border:2px solid var(--ink); border-radius:4px; background:var(--paper); box-shadow:none; }
+.repo-option { display:flex; align-items:center; gap:10px; min-height:48px; margin:6px 0; padding:10px 12px; border:2px solid transparent; border-radius:4px; cursor:pointer; overflow-wrap:anywhere; }
 .repo-option:hover { background:var(--paper); }
-.repo-option:has(input:checked) { background:var(--blue); border-color:#729bdc; box-shadow:var(--shadow-small); }
+.repo-option:has(input:checked) { background:var(--pop-mint); border-color:var(--ink); box-shadow:var(--shadow-small); }
 .repo-option:focus-within { outline:2px solid var(--focus); outline-offset:-2px; }
 .repo-option input { flex:none; width:20px;height:20px; accent-color:var(--deep); }
 .repo-option span { min-width:0; }
@@ -25,6 +25,8 @@ input::placeholder { color:var(--muted); opacity:1; }
 .manual-repo { display:grid; gap:8px; margin:16px 0 8px; }
 .manual-row input { flex:1; }.manual-row button { flex:none; }
 #repo-selection-message { font-size:13px; min-height:20px; }
-.repo-dialog-foot { border-top:1px solid var(--line); padding-top:16px; margin-top:12px; flex-wrap:wrap; }
+.repo-dialog-foot { border-top:1px solid var(--ink); padding-top:16px; margin-top:12px; flex-wrap:wrap; }
 .repo-dialog-foot .btn { flex:none; }
 @media(max-width:460px) { #repo-dialog { padding:16px; } .repo-dialog-head h2 { font-size:22px; } .repo-option { padding:8px; gap:8px; } .repo-dialog-foot .btn { flex:1; } }
+
+.repo-dialog-head { border-bottom:2px solid var(--ink); padding-bottom:8px; } .repo-option:active { background:var(--pop-yellow); } .repo-option input { accent-color:var(--ink); }

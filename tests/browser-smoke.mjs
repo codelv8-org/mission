@@ -68,6 +68,8 @@ try{
  await wait(()=>ev("!document.querySelector('#analytics-cards').hidden && document.querySelectorAll('#project-timeline tbody tr').length===5"),"analytics");
  const layout=await ev("(()=>{const r=s=>document.querySelector(s).getBoundingClientRect();return {timeline:r('.analysis-timeline').top,trend:r('.analysis-trend').top,lower:['.analysis-priority','.analysis-projects','.analysis-focus','.analysis-workflows'].map(s=>r(s).top)}})()");
  assert.ok(Math.abs(layout.timeline-layout.trend)<2,"timeline and daily chart share a row");assert.ok(layout.lower.every(y=>Math.abs(y-layout.lower[0])<2),"four lower blocks share a row");
+ const material=await ev("(()=>{const s=getComputedStyle(document.querySelector('#analytics-active-card'));const body=getComputedStyle(document.body);return {bg:s.backgroundColor,border:s.borderTopWidth,ink:s.borderTopColor,shadow:s.boxShadow,radius:s.borderTopLeftRadius,image:s.backgroundImage,canvas:body.backgroundColor}})()");
+ assert.equal(material.bg,"rgb(78, 205, 196)");assert.equal(material.border,"3px");assert.equal(material.ink,"rgb(17, 17, 17)");assert.match(material.shadow,/5px 5px 0px/);assert.equal(material.radius,"4px");assert.equal(material.image,"none");assert.equal(material.canvas,"rgb(255, 253, 245)");
  await noOverflow("1440 dashboard");await shot("02-dashboard-1440");
  await ev("document.querySelector('#project-timeline button[data-day]').click()");
  assert.equal(await ev("document.querySelector('#timeline-summary').children.length"),4);assert.equal(await ev("document.querySelectorAll('#project-timeline button[aria-pressed=true]').length"),1);
