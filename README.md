@@ -34,7 +34,7 @@ A private-data workspace with a public GitHub Pages application shell.
 6. Verify authorized account login succeeds, unauthorized account receives 403, unauthenticated API receives 401, unconfigured backend fails closed, and GitHub partial errors are visible. See SECURITY.md.
 
 ## Scope and limits
-This is a read-only MVP. Issue priorities are derived from labels, not edited in GitHub. Commits are from the default branch, pull requests from the latest updated page, workflow runs from the latest page. The dashboard is a bounded recent sample, not a complete audit history. It does not infer an active AI agent merely from a commit. No background synchronization, database, or AI summaries yet. Refreshes consume GitHub API quota.
+This is a read-only MVP. Issue priorities are derived from labels, not edited in GitHub. Commits are from the default branch, pull requests from the latest updated page, workflow runs from the latest page. The timeline is a bounded recent sample, not a complete audit history. The priority queue is separately loaded from the latest 100 open issue/PR results per repository (PRs excluded) regardless of age; it is not a complete backlog for larger repositories. It does not infer an active AI agent merely from a commit. No background synchronization, database, or AI summaries yet. Refreshes consume GitHub API quota.
 
 The GitHub Pages HTML/CSS/JS are public, even before login. Only the API/data is protected. If all frontend assets themselves must be private, deploy the frontend on a host with server/edge authentication (e.g. Cloudflare Access with a protected origin, no public bypass); do not publish them on public Pages.
 

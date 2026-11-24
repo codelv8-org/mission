@@ -23,14 +23,16 @@ async function readRepo(name,env,since){
     github(base+"/commits?per_page=10&since="+encodeURIComponent(since),env),
     github(base+"/issues?state=all&sort=updated&direction=desc&per_page=30&since="+encodeURIComponent(since),env),
     github(base+"/pulls?state=all&sort=updated&direction=desc&per_page=10",env),
-    github(base+"/actions/runs?per_page=5",env)
+    github(base+"/actions/runs?per_page=5",env),
+    github(base+"/issues?state=open&sort=updated&direction=desc&per_page=100",env)
   ]);
-  const sections=["repository","commits","issues","pulls","workflows"],errors=[],activity=[],issues=[];
+  const sections=["repository","commits","issue_activity","pulls","workflows","issues"],errors=[],activity=[],issues=[];
   const vals=results.map((r,i)=>{if(r.status==="fulfilled")return r.value;errors.push({repo:name,section:sections[i],status:r.reason?.status||"unavailable"});return null;});
-  const [r,commits,issueList,pulls,runs]=vals;
+  const [r,commits,issueList,pulls,runs,openIssues]=vals;
   const repository=r?{name,url:r.html_url,description:clean(r.description),branch:r.default_branch,pushedAt:r.pushed_at}:null;
   for(const c of Array.isArray(commits)?commits:[])activity.push(event(name,"commit",c.commit?.message?.split("\n")[0],c.html_url,c.commit?.committer?.date));
-  for(const i of Array.isArray(issueList)?issueList:[]){if(i.pull_request)continue;activity.push(event(name,"issue",i.title,i.html_url,i.updated_at,i.state));if(i.state==="open")issues.push({repo:name,number:i.number,title:clean(i.title),url:i.html_url,updatedAt:i.updated_at,...priority(i.labels)});}
+  for(const i of Array.isArray(issueList)?issueList:[]){if(i.pull_request)continue;activity.push(event(name,"issue",i.title,i.html_url,i.updated_at,i.state));}
+  for(const i of Array.isArray(openIssues)?openIssues:[]){if(i.pull_request)continue;issues.push({repo:name,number:i.number,title:clean(i.title),url:i.html_url,updatedAt:i.updated_at,...priority(i.labels)});}
   for(const p of Array.isArray(pulls)?pulls:[])activity.push(event(name,"pull",p.title,p.html_url,p.updated_at,p.merged_at?"merged":p.state));
   for(const w of Array.isArray(runs?.workflow_runs)?runs.workflow_runs:[])activity.push(event(name,"workflow",w.name,w.html_url,w.updated_at,w.conclusion||w.status));
   return {repository,activity,issues,errors};
@@ -52,7 +54,7 @@ export default {async fetch(request,env){
   let names;try{names=configuredRepos(env.GITHUB_REPOSITORIES);}catch{return json({error:"not_configured"},503,origin);}
   const since=new Date(Date.now()-30*86400000).toISOString();
   const repositories=[],activity=[],issues=[],errors=[];
-  // Five GitHub calls per repository, sequential batches keep outgoing connections bounded.
+  // Six GitHub calls per repository, sequential batches keep outgoing connections bounded.
   for(const name of names){const r=await readRepo(name,env,since);if(r.repository)repositories.push(r.repository);activity.push(...r.activity);issues.push(...r.issues);errors.push(...r.errors);}
   activity.sort((a,b)=>Date.parse(b.at)-Date.parse(a.at));
   return json({user:{email:payload.email,expiresAt:payload.exp},fetchedAt:new Date().toISOString(),repositories,activity,issues,errors},200,origin);
