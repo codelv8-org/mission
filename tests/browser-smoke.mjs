@@ -2,10 +2,10 @@
 import assert from "node:assert/strict";
 import {createServer} from "node:http";
 import {spawn,spawnSync} from "node:child_process";
-import {mkdtemp,readFile,mkdir,writeFile,rm} from "node:fs/promises";
+import {mkdtemp,readFile,mkdir,writeFile,rm,readdir} from "node:fs/promises";
 import {tmpdir} from "node:os";
 import {join,resolve,extname} from "node:path";
-import {fileURLToPath} from "node:url";
+import {fileURLToPath,pathToFileURL} from "node:url";
 const root=fileURLToPath(new URL("../docs/",import.meta.url));
 const delay=ms=>new Promise(r=>setTimeout(r,ms));
 const wait=async(fn,label)=>{for(let i=0;i<100;i++){try{const result=await fn();if(result)return result;}catch{}await delay(100);}throw Error("Timed out: "+label);};
@@ -24,6 +24,7 @@ const url="http://127.0.0.1:"+server.address().port+"/";
 const proc=spawn(chrome,["--headless=new","--no-sandbox","--disable-dev-shm-usage","--disable-background-networking","--no-first-run","--remote-debugging-port=0","--user-data-dir="+dir,"about:blank"],{stdio:"ignore"});
 let ws;
 function installFixture(){
+ window.fixtureRequests=0;
  const nativeFetch=window.fetch.bind(window),names=["mission","workspace","wifi","api","it-portal"],today=Date.now();
  const stamp=(days=0,hours=0)=>new Date(today-days*86400000-hours*3600000).toISOString();
  const repo=(name)=>({id:names.indexOf(name)+1,full_name:"demo/"+name,html_url:"https://github.com/demo/"+name,default_branch:"main",private:true,pushed_at:stamp(),description:"Synthetic UI test fixture"});
@@ -31,6 +32,7 @@ function installFixture(){
  window.fetch=async(input,options={})=>{
   const url=new URL(typeof input==="string"?input:input.url,location.href);
   if(url.origin!=="https://api.github.com")return nativeFetch(input,options);
+  window.fixtureRequests++;
   if(options.method!=="GET")throw Error("Unexpected mutation");
   const p=url.pathname;
   if(p==="/user")return respond({id:123,login:"demo-qa"});
@@ -85,6 +87,28 @@ try{
  await ev("document.querySelector('#workspace-theme').value='light';document.querySelector('#workspace-theme').dispatchEvent(new Event('change'))");
  await ev("document.querySelector('#project-timeline button[data-day]').click()");
  assert.equal(await ev("document.querySelector('#timeline-summary').children.length"),4);assert.equal(await ev("document.querySelectorAll('#project-timeline button[aria-pressed=true]').length"),1);
+ // Export the currently selected repository and day, with the active theme.
+ await ev("document.querySelector('#repo-filter').value='demo/mission';document.querySelector('#repo-filter').dispatchEvent(new Event('change'));document.querySelector('#workspace-theme').value='dark';document.querySelector('#workspace-theme').dispatchEvent(new Event('change'));");
+ await ev("document.querySelector('#project-timeline button[data-day]').click()");
+ const expectedSnapshot=await ev("({active:document.querySelector('#analytics-active').textContent,total:document.querySelector('#analytics-total').textContent,requests:window.fixtureRequests})");
+ await ev("document.querySelector('#timeline-detail-list').append(document.createTextNode('<script>alert(1)</script> github_pat_'+'a'.repeat(40)))");
+ const downloadDir=join(dir,"downloads");await mkdir(downloadDir);
+ await send("Browser.setDownloadBehavior",{behavior:"allow",downloadPath:downloadDir});
+ await ev("document.querySelector('#download-html').click()");
+ assert.equal(await ev("document.querySelector('#snapshot-dialog').open"),true);
+ await ev("document.querySelector('#cancel-snapshot').click()");
+ assert.equal(await ev("document.querySelector('#snapshot-dialog').open"),false);
+ assert.equal((await readdir(downloadDir)).length,0);
+ await ev("document.querySelector('#download-html').click();document.querySelector('#confirm-snapshot').click()");
+ const savedName=await wait(async()=>(await readdir(downloadDir)).find(n=>/^mission-dashboard-.*\.html$/.test(n)),"HTML snapshot download");
+ const savedPath=join(downloadDir,savedName),saved=await readFile(savedPath,"utf8");
+ assert.match(saved,/<!doctype html>/i);assert.match(saved,/data-theme="dark"/);assert.match(saved,/connect-src 'none'/);assert.match(saved,/&lt;script&gt;alert\(1\)&lt;\/script&gt;/);assert.match(saved,/\[REDACTED\]/);
+ assert.ok(!saved.includes("github_pat_"+"a".repeat(40)));assert.ok(!/<script\b|<input\b|<dialog\b|<link\b|<button\b|<select\b/i.test(saved));
+ assert.ok(!saved.includes('id="login"')&&!saved.includes('id="activity-panel"')&&!saved.includes('id="account-login"')&&!saved.includes("demo/workspace"));
+ assert.equal(await ev("window.fixtureRequests"),expectedSnapshot.requests);
+ assert.equal(await ev("document.querySelector('#snapshot-dialog').open"),false);
+ await writeFile(join(out,"08-dashboard-snapshot.html"),saved);
+ await ev("document.querySelector('#repo-filter').value='';document.querySelector('#repo-filter').dispatchEvent(new Event('change'));document.querySelector('#workspace-theme').value='light';document.querySelector('#workspace-theme').dispatchEvent(new Event('change'));");
  await ev("document.querySelector('#timeline-clear').click()");
  assert.equal(await ev("document.querySelector('#timeline-summary').hidden"),true);
  await ev("const p=document.querySelector('#period');p.value='30';p.dispatchEvent(new Event('change'));");
@@ -105,6 +129,22 @@ try{
  await ev("document.querySelector('#logout').click()");
  assert.equal(await ev("document.querySelector('#analytics-cards').hidden && document.querySelector('#timeline-summary').children.length===0 && document.querySelector('#pat-input').value==='' && document.querySelector('#workspace').hidden"),true);
  await viewport(375,812);await noOverflow("mobile login");
+ assert.equal(await ev("document.querySelector('#download-html').disabled"),true);
+ assert.equal(await ev("document.querySelector('#snapshot-scope').textContent"),"");
+ // Open the downloaded report with the network disabled.
+ await send("Network.enable");
+ await send("Network.emulateNetworkConditions",{offline:true,latency:0,downloadThroughput:0,uploadThroughput:0});
+ await viewport(1440,1000);await send("Page.navigate",{url:pathToFileURL(savedPath).href});
+ await wait(()=>ev("location.protocol==='file:' && document.readyState==='complete' && !!document.querySelector('#analytics-active')"),"offline HTML snapshot");
+ assert.equal(await ev("document.querySelector('#analytics-active').textContent"),expectedSnapshot.active);
+ assert.equal(await ev("document.querySelector('#analytics-total').textContent"),expectedSnapshot.total);
+ assert.equal(await ev("document.querySelectorAll('#project-timeline tbody tr').length"),1);
+ assert.equal(await ev("document.querySelectorAll('.kpi-spark svg').length"),2);
+ assert.equal(await ev("document.querySelector('#timeline-summary').children.length"),4);
+ assert.equal(await ev("getComputedStyle(document.body).backgroundColor"),"rgb(17, 19, 24)");
+ assert.equal(await ev("document.querySelectorAll('script,input,button,select,dialog,link').length"),0);
+ assert.equal(await ev("performance.getEntriesByType('resource').filter(r=>/^https?:/.test(r.name)).length"),0);
+ await noOverflow("offline snapshot");await shot("09-offline-snapshot-1440");
  assert.deepEqual(errors,[]);
  console.log("Browser smoke passed: login, 5-repo analytics, 1440 bento rows, 7/30-day and repository filters, day drill-down, 1024/768/375/landscape layout, dialog, reduced motion, logout.");
 }finally{ws?.close();proc.kill();await new Promise(r=>server.close(r));await delay(200);await rm(dir,{recursive:true,force:true}).catch(()=>{});}

@@ -7,8 +7,8 @@ input::placeholder { color:var(--muted); opacity:1; }
 .pat-form p { font-size:12px; }
 .github-login { display:flex; align-items:center; justify-content:center; min-height:48px; font-weight:650; width:100%; }
 .token-link { font-size:13px; color:var(--deep); text-align:center; padding:10px 4px; min-height:44px; display:grid; place-items:center; }
-#repo-dialog { width:min(600px,calc(100vw - 24px)); max-width:100%; max-height:calc(100vh - 24px); max-height:calc(100dvh - 24px); border:1px solid var(--line); border-radius:16px; padding:24px; color:var(--ink); background:var(--surface); box-shadow:0 16px 48px #0d102d30; overflow:auto; }
-#repo-dialog::backdrop { background:#10131d99; }
+#repo-dialog,#snapshot-dialog { width:min(600px,calc(100vw - 24px)); max-width:100%; max-height:calc(100vh - 24px); max-height:calc(100dvh - 24px); border:1px solid var(--line); border-radius:16px; padding:24px; color:var(--ink); background:var(--surface); box-shadow:0 16px 48px #0d102d30; overflow:auto; }
+#repo-dialog::backdrop,#snapshot-dialog::backdrop { background:#10131d99; }
 .repo-dialog-head,.repo-dialog-foot,.manual-row { display:flex; align-items:center; gap:12px; justify-content:space-between; min-width:0; }
 .repo-dialog-head h2 { margin:5px 0 12px; font-size:23px; line-height:1.25; font-weight:700; }
 .repo-dialog-head>div,.repo-dialog-foot>span { min-width:0; overflow-wrap:anywhere; }
@@ -27,4 +27,7 @@ input::placeholder { color:var(--muted); opacity:1; }
 #repo-selection-message { font-size:12px; min-height:20px; }
 .repo-dialog-foot { border-top:1px solid var(--line); padding-top:16px; margin-top:12px; flex-wrap:wrap; }
 .repo-dialog-foot .btn { flex:none; }
-@media(max-width:460px) { #repo-dialog { padding:16px; } .repo-dialog-head h2 { font-size:20px; } .repo-option { padding:8px; gap:8px; } .repo-dialog-foot .btn { flex:1; } }
+@media(max-width:460px) { #repo-dialog,#snapshot-dialog { padding:16px; } .repo-dialog-head h2 { font-size:20px; } .repo-option { padding:8px; gap:8px; } .repo-dialog-foot .btn { flex:1; } }
+
+#snapshot-dialog { width:min(520px,calc(100vw - 24px)); }
+.snapshot-warning { margin:16px 0; padding:12px; border:1px solid var(--line); border-radius:8px; color:var(--peach-ink); background:var(--peach); font-size:13px; line-height:1.6; }

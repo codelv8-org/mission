@@ -11,3 +11,6 @@ Flat attached left navigation and thin toolbar; compact app shell. 3 KPI cards, 
 
 ## Verification
 GitHub PAT, API permissions, API client, analytics model and CSP unchanged. No backend, network dependencies or extra API requests. Theme choice in session memory only. Regression tests cover static contracts, sampled text contrast in both themes, actual browser layout, theme switch, system preference, expand/collapse, chart render, filter, day drill-down, repository dialog and logout using synthetic fixture. Production login needs real credential testing by the user.
+
+## Download HTML snapshot
+Toolbar secondary action enabled only with a completed loaded snapshot. Explicit confirmation warns of unencrypted private project information. Static HTML preserves current active view, filters, theme, rendered chart SVG, selected-day detail, and full scrollable rows, with timestamps and read-only labeling. No hidden views, raw payload, PAT, login or refresh controls; CSSOM embeds local styles, no network requests. Native details can expand/collapse and GitHub links remain external references. Snapshot does not update or provide offline data storage.

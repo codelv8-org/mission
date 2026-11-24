@@ -17,7 +17,7 @@ jobs:
         with:
           node-version: '22'
       - run: npm test
-      - run: node --check docs/app.js && node --check docs/github-api.mjs && node --check docs/analytics.mjs && node --check docs/analytics-view.mjs && node --check docs/theme.mjs
+      - run: node --check docs/app.js && node --check docs/github-api.mjs && node --check docs/analytics.mjs && node --check docs/analytics-view.mjs && node --check docs/theme.mjs && node --check docs/snapshot.mjs
       - name: Browser responsive smoke (synthetic GitHub fixture)
         run: node tests/browser-smoke.mjs
       - name: Upload browser QA screenshots
