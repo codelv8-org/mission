@@ -214,7 +214,7 @@ $("apply-repos").addEventListener("click",()=>{
   if(!draft.size||draft.size>MAX_REPOS)return;
   selected=available.filter(r=>draft.has(r.name.toLowerCase())).map(r=>r.name);
   $("repo-dialog").close();
-  data=null;updateExport();resetAnalytics();["activity-list","priority-list","repo-list"].forEach(id=>$(id).replaceChildren());
+  data=null;resetAnalytics();updateExport();["activity-list","priority-list","repo-list"].forEach(id=>$(id).replaceChildren());
   ["m-repos","m-commits","m-issues","m-priority"].forEach(id=>$(id).textContent="—");$("repo-filter").replaceChildren(new Option("All repositories",""));$("updated").textContent="";
   load();
 });
