@@ -119,8 +119,25 @@ async function load(){
     notice(errorText(e)+(data?" · แสดงข้อมูลล่าสุดของเซสชันนี้":" · ยังไม่มีข้อมูล Dashboard"));
   }finally{if(current===session&&request===controller){request=null;$("refresh").disabled=false;}}
 }
+// Decorative, locally defined SVG icons; upstream strings never become markup.
+const EVENT_PATHS=Object.freeze({
+  commit:["M3 12h6m6 0h6","M15 12a3 3 0 1 1-6 0 3 3 0 0 1 6 0"],
+  pull:["M6 3v13m12-4v6M6 5h8a4 4 0 0 1 4 4v3m-3-9 3 3 3-3","M9 18a3 3 0 1 1-6 0 3 3 0 0 1 6 0","M21 18a3 3 0 1 1-6 0 3 3 0 0 1 6 0"],
+  issue:["M12 3a9 9 0 1 0 0 18 9 9 0 0 0 0-18","M12 7v5m0 4h.01"],
+  workflow:["M4 4h6v6H4zM14 14h6v6h-6zM7 10v7h7"],
+  fallback:["M5 12h14"]
+});
+function eventIcon(type){
+  const ns="http://www.w3.org/2000/svg",svg=document.createElementNS(ns,"svg");
+  svg.setAttribute("viewBox","0 0 24 24");svg.setAttribute("class","ui-icon");svg.setAttribute("aria-hidden","true");svg.setAttribute("focusable","false");svg.setAttribute("fill","none");svg.setAttribute("stroke","currentColor");svg.setAttribute("stroke-width","1.8");svg.setAttribute("stroke-linecap","round");svg.setAttribute("stroke-linejoin","round");
+  for(const d of Object.hasOwn(EVENT_PATHS,type)?EVENT_PATHS[type]:EVENT_PATHS.fallback){const p=document.createElementNS(ns,"path");p.setAttribute("d",d);svg.append(p);}
+  return svg;
+}
 function item(box, icon, title, href, meta, cls="") {
-  const row=el("div","item");row.append(el("span","item-icon "+cls,icon));const body=el("div");body.append(link(title,href),el("div","meta",meta));row.append(body);box.append(row);
+  const row=el("div","item"),badge=el("span","item-icon "+cls);
+  if(cls.startsWith("prio"))badge.textContent=icon;
+  else badge.append(eventIcon(icon));
+  row.append(badge);const body=el("div");body.append(link(title,href),el("div","meta",meta));row.append(body);box.append(row);
 }
 function render(){
   if(!data)return;
@@ -137,8 +154,7 @@ function render(){
   $("m-issues").textContent=issues.length+(issuesComplete?"":"*");
   $("m-priority").textContent=issues.filter(e=>e.blocked||e.rank<=1).length+(issuesComplete?"":"*");
   const act=$("activity-list"),prior=$("priority-list"),rl=$("repo-list");act.replaceChildren();prior.replaceChildren();rl.replaceChildren();
-  const icons={commit:"↳",pull:"⇄",issue:"◉",workflow:"◈"};
-  for(const e of events) item(act,icons[e.type]||"·",e.title,e.url,e.repo+" · "+e.type+(e.status?" · "+e.status:"")+" · "+safeDate(e.at));
+  for(const e of events) item(act,e.type,e.title,e.url,e.repo+" · "+e.type+(e.status?" · "+e.status:"")+" · "+safeDate(e.at),"event-"+(Object.hasOwn(EVENT_PATHS,e.type)?e.type:"fallback"));
   if(!events.length)empty(act,"ไม่มี Activity ที่โหลดได้ในช่วงเวลานี้");
   for(const i of issues) item(prior,i.priority,i.title,i.url,i.repo+" #"+i.number+(i.blocked?" · Blocked":"")+" · "+safeDate(i.updatedAt),"prio "+i.priority);
   if(!issues.length)empty(prior,"ไม่มี Open Issue ที่โหลดได้");
@@ -157,7 +173,7 @@ function switchView(view){
 document.querySelectorAll("[data-view]").forEach(b=>b.addEventListener("click",()=>switchView(b.dataset.view)));
 $("period").addEventListener("change",render);$("repo-filter").addEventListener("change",render);
 $("refresh").addEventListener("click",load);$("logout").addEventListener("click",()=>clearSession());
-$("github-login").addEventListener("click",connect);$("pat-input").addEventListener("keydown",e=>{if(e.key==="Enter"){e.preventDefault();connect();}});
+$("github-login").addEventListener("click",connect);$("pat-input").addEventListener("keydown",e=>{if(e.key==="Enter"&&!e.isComposing){e.preventDefault();connect();}});
 $("manage-repos").addEventListener("click",openPicker);$("close-repos").addEventListener("click",()=>$("repo-dialog").close());
 $("repo-search").addEventListener("input",renderPicker);$("add-repo").addEventListener("click",addRepo);
 $("apply-repos").addEventListener("click",()=>{
