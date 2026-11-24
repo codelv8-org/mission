@@ -125,3 +125,15 @@ button.heat-cell[aria-pressed="true"] { outline:2px solid var(--focus); outline-
 @media(max-width:340px) { .analysis-kpi { grid-column:1/-1; } }
 @media(pointer:coarse) { .expand-card { width:44px;height:44px; } .heat-cell,.analysis-project-link { min-height:44px; } }
 @media(forced-colors:active) { .heat-cell,.heat-key,.workflow-tile,.event-type,.focus-badge,.workflow-state { border:1px solid CanvasText; } .trend-svg { forced-color-adjust:none; } }
+
+/* Calendar timeline: grouped month headers and weekend columns, both themes. */
+.weekend-legend{display:inline-flex;align-items:center;gap:5px}.weekend-key{background:var(--peach);border:1px solid var(--peach-ink)}
+.project-timeline.timeline-30{min-width:1640px}.project-timeline.timeline-monthly{min-width:920px}.timeline-monthly .timeline-date{min-width:62px}
+.timeline-date-number,.timeline-weekday{display:block;line-height:1.4}.timeline-date-number{color:var(--ink);font-size:12px;font-weight:700}.timeline-weekday{font-size:10px;color:var(--muted);margin-top:2px}
+.project-timeline thead th.timeline-weekend,.project-timeline td.timeline-weekend{background:var(--peach);border-radius:5px}.timeline-weekend .timeline-date-number,.timeline-weekend .timeline-weekday{color:var(--peach-ink)}
+.timeline-weekend .heat-0{background:var(--peach);color:var(--peach-ink)}.timeline-weekend .heat-cell{border-bottom:2px solid var(--peach-ink)}
+.project-timeline thead th.timeline-month-group{height:28px;min-height:28px;background:var(--accent-soft);color:var(--deep);border-radius:5px;font-weight:700;white-space:nowrap;padding:4px 6px;top:0}
+.project-timeline.timeline-grouped thead tr:nth-child(2) th{top:32px}.project-timeline .timeline-month-start{border-left:2px solid var(--control-border)}
+@media(forced-colors:active){.timeline-weekend{border:1px dashed CanvasText!important}.timeline-month-group{border:1px solid CanvasText}}
+
+.project-timeline.timeline-30 .timeline-date{min-width:44px}.project-timeline.timeline-monthly .timeline-date{min-width:62px}

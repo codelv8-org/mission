@@ -1,5 +1,7 @@
 // Browser-only, read-only API. No credentials are persisted or sent to another origin.
+import {historyRequest} from "./period.mjs";
 const API="https://api.github.com";
+export const MAX_HISTORY_PAGES=5;
 export const MAX_REPOS=20;
 export const MAX_DISCOVERY_PAGES=5;
 export const isFineGrainedPAT=value=>typeof value==="string"&&/^github_pat_[A-Za-z0-9_]{20,500}$/.test(value);
@@ -50,39 +52,70 @@ export function createGitHubClient(token,{fetcher=fetch,signal}={}){
     if(!validRepo(body?.full_name))throw new GitHubError(502,"invalid_repository");
     return repository(body);
   }
-  async function readRepo(name,since){
+  // Fixed-origin, bounded pagination; never follow a Link URL supplied by the server.
+  async function getPages(path,perPage,pages,section,since){
+    const records=[],seen=new Set();let truncated=false;
+    for(let page=1;page<=pages;page++){
+      const response=await get(path+(path.includes("?")?"&":"?")+"per_page="+perPage+"&page="+page);
+      const list=section==="workflows"?response.body?.workflow_runs:response.body;
+      if(!Array.isArray(list))throw new GitHubError(502,"invalid_history");
+      for(const item of list){
+        const key=item?.sha??item?.id??item?.number??item?.html_url;
+        if(key!==undefined&&key!==null){if(seen.has(key))continue;seen.add(key);}
+        records.push(item);
+      }
+      // PRs are sorted by updated desc; older pages cannot contain in-range updates.
+      if(section==="pulls"&&list.length&&list.every(x=>Number.isFinite(Date.parse(x.updated_at))&&Date.parse(x.updated_at)<Date.parse(since)))break;
+      if(!response.next&&list.length<perPage)break;
+      if(page===pages)truncated=true;
+    }
+    return {records,truncated};
+  }
+  async function readRepo(name,since,pages){
     const base="/repos/"+name.split("/").map(encodeURIComponent).join("/");
-    const sections=["repository","commits","issue_activity","pulls","workflows","issues"];
-    const routes=[base,base+"/commits?per_page=10&since="+encodeURIComponent(since),base+"/issues?state=all&sort=updated&direction=desc&per_page=30&since="+encodeURIComponent(since),base+"/pulls?state=all&sort=updated&direction=desc&per_page=10",base+"/actions/runs?per_page=5",base+"/issues?state=open&sort=updated&direction=desc&per_page=100"];
-    const results=await Promise.allSettled(routes.map(get));
+    const long=pages>1,sections=["repository","commits","issue_activity","pulls","workflows","issues"];
+    const tasks=[get(base),
+      getPages(base+"/commits?since="+encodeURIComponent(since),long?100:10,pages,"commits",since),
+      getPages(base+"/issues?state=all&sort=updated&direction=desc&since="+encodeURIComponent(since),long?100:30,pages,"issue_activity",since),
+      getPages(base+"/pulls?state=all&sort=updated&direction=desc",long?100:10,pages,"pulls",since),
+      getPages(base+"/actions/runs",long?100:5,pages,"workflows",since),
+      getPages(base+"/issues?state=open&sort=updated&direction=desc",100,1,"issues",since)];
+    const results=await Promise.allSettled(tasks);
     signal?.throwIfAborted();
     const fatal=results.find(r=>r.status==="rejected"&&(r.reason?.status===401||r.reason?.kind==="rate_limited"));
     if(fatal)throw fatal.reason;
-    const errors=[],activity=[],issues=[];
-    const values=results.map((r,i)=>{if(r.status==="fulfilled")return r.value.body;errors.push({repo:name,section:sections[i],status:r.reason?.status||"unavailable"});return null;});
+    const errors=[],truncated=[],activity=[],issues=[];
+    const values=results.map((r,i)=>{
+      if(r.status==="fulfilled"){
+        if(i===0)return r.value.body;
+        if(r.value.truncated)truncated.push({repo:name,section:sections[i]});
+        return r.value.records;
+      }
+      errors.push({repo:name,section:sections[i],status:r.reason?.status||"unavailable"});return null;
+    });
     const [r,commits,issueList,pulls,runs,openIssues]=values;
     const repo=r&&validRepo(r.full_name)?{...repository(r),name}:null;
     const event=(type,title,url,at,status="")=>({repo:name,type,title:clean(title),url,at,status:clean(status)});
-    for(const c of Array.isArray(commits)?commits:[])activity.push(event("commit",c.commit?.message?.split("\n")[0],c.html_url,c.commit?.committer?.date));
-    for(const i of Array.isArray(issueList)?issueList:[]){if(!i.pull_request)activity.push(event("issue",i.title,i.html_url,i.updated_at,i.state));}
-    for(const i of Array.isArray(openIssues)?openIssues:[]){if(!i.pull_request)issues.push({repo:name,number:i.number,title:clean(i.title),url:i.html_url,updatedAt:i.updated_at,...priority(i.labels)});}
-    for(const p of Array.isArray(pulls)?pulls:[])activity.push(event("pull",p.title,p.html_url,p.updated_at,p.merged_at?"merged":p.state));
-    for(const w of Array.isArray(runs?.workflow_runs)?runs.workflow_runs:[])activity.push(event("workflow",w.name,w.html_url,w.updated_at,w.conclusion||w.status));
-    return {repository:repo,activity,issues,errors};
+    for(const c of commits||[])activity.push(event("commit",c.commit?.message?.split("\n")[0],c.html_url,c.commit?.committer?.date));
+    for(const i of issueList||[]){if(!i.pull_request)activity.push(event("issue",i.title,i.html_url,i.updated_at,i.state));}
+    for(const i of openIssues||[]){if(!i.pull_request)issues.push({repo:name,number:i.number,title:clean(i.title),url:i.html_url,updatedAt:i.updated_at,...priority(i.labels)});}
+    for(const p of pulls||[])activity.push(event("pull",p.title,p.html_url,p.updated_at,p.merged_at?"merged":p.state));
+    for(const w of runs||[])activity.push(event("workflow",w.name,w.html_url,w.updated_at,w.conclusion||w.status));
+    return {repository:repo,activity:activity.filter(e=>Date.parse(e.at)>=Date.parse(since)),issues,errors,truncated};
   }
-  async function dashboard(names,expectedUser){
+  async function dashboard(names,expectedUser,{period="7"}={}){
     if(!Array.isArray(names)||names.length>MAX_REPOS||names.some(n=>!validRepo(n))||new Set(names.map(n=>n.toLowerCase())).size!==names.length)throw new GitHubError(400,"invalid_selection");
     const identity=await user();
     if(expectedUser&&identity.id!==expectedUser.id)throw new GitHubError(401,"identity_changed");
-    const since=new Date(Date.now()-30*86400000).toISOString(),repositories=[],activity=[],issues=[],errors=[];
+    const {since,pages}=historyRequest(period),repositories=[],activity=[],issues=[],errors=[],truncated=[];
     for(const name of names){
       signal?.throwIfAborted();
-      const r=await readRepo(name,since);
+      const r=await readRepo(name,since,Math.min(MAX_HISTORY_PAGES,pages));
       if(r.repository)repositories.push(r.repository);
-      activity.push(...r.activity);issues.push(...r.issues);errors.push(...r.errors);
+      activity.push(...r.activity);issues.push(...r.issues);errors.push(...r.errors);truncated.push(...r.truncated);
     }
     activity.sort((a,b)=>(Date.parse(b.at)||0)-(Date.parse(a.at)||0));
-    return {user:identity,fetchedAt:new Date().toISOString(),repositories,activity,issues,errors};
+    return {user:identity,fetchedAt:new Date().toISOString(),historySince:since,historyPages:pages,repositories,activity,issues,errors,truncated};
   }
   return Object.freeze({user,discover,findRepo,dashboard});
 }

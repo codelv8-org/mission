@@ -12,11 +12,11 @@ const data={fetchedAt:"2026-11-24T12:00:00Z",repositories:[{name:"org/a"},{name:
  {repo:"org/b",type:"commit",at:"2026-11-24T13:00:00Z"},
  {repo:"org/b",type:"commit",at:"invalid"}
 ],issues:[{repo:"org/a",rank:2,blocked:true,number:1,updatedAt:"2026-11-20"},{repo:"org/a",rank:0,blocked:false,number:2},{repo:"org/b",rank:4,blocked:false,number:3}],errors:[{repo:"org/b",section:"commits",status:403}]};
-test("UTC calendar boundary, recent sample and latest workflow",()=>{
+test("Bangkok calendar boundary, recent sample and latest workflow",()=>{
  const m=analyzeSample(data,{names:["org/a","org/b","org/c"],days:7});
- assert.equal(m.dates[0],"2026-11-18");assert.equal(m.dates.at(-1),"2026-11-24");assert.equal(m.observedTotal,5);assert.equal(m.active,2);assert.equal(m.loadedCount,2);
+ assert.equal(m.dates[0],"2026-11-18");assert.equal(m.dates.at(-1),"2026-11-24");assert.equal(m.observedTotal,6);assert.equal(m.active,2);assert.equal(m.loadedCount,2);
  assert.equal(m.projects[0].latestWorkflow.status,"success");assert.equal(m.projects[0].cells.at(-1).events.length,3);
- assert.equal(m.daily.reduce((s,d)=>s+d.total,0),5);assert.equal(m.projects[1].activityPartial,true);assert.equal(m.projects[2].timelinePartial,true);
+ assert.equal(m.daily.reduce((s,d)=>s+d.total,0),6);assert.equal(m.projects[1].activityPartial,true);assert.equal(m.projects[2].timelinePartial,true);
  assert.equal(m.focus.length,2);assert.equal(m.focus[0].number,1);assert.equal(m.blocked,1);assert.deepEqual(m.breakdown.map(x=>x.count),[1,0,1,0,1]);
  assert.equal(m.issueTotal,3);assert.equal(m.issuePartial,true);assert.equal(heatClass(0,true),"heat-unknown");
 });

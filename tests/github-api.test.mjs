@@ -61,3 +61,18 @@ test("frontend static security baseline",async()=>{
  assert.ok(!html.includes("accounts.google.com"));assert.ok(!html.includes("workers.dev"));
  assert.match(app,/pagehide/);assert.match(app,/createGitHubClient/);
 });
+
+test("extended period loads bounded pages and marks capped data without following foreign Link URLs",async()=>{
+ const {client,calls}=mock(url=>{
+  const u=new URL(url);
+  if(u.pathname.endsWith("/commits")){
+   const page=Number(u.searchParams.get("page"));
+   return json([{sha:"sha-"+page,commit:{message:"fixture",committer:{date:new Date(Date.now()-86400000).toISOString()}},html_url:"https://github.com/org/a/commit/"+page}],200,{link:'<https://evil.example/next>; rel="next"'});
+  }
+  return null;
+ });
+ const m=await client.dashboard(["org/a"],undefined,{period:"year"});
+ assert.equal(m.historyPages,5);assert.equal(calls.filter(u=>u.includes("/commits?")).length,5);assert.equal(m.activity.filter(e=>e.type==="commit").length,5);
+ assert.ok(m.truncated.some(e=>e.repo==="org/a"&&e.section==="commits"));assert.ok(calls.every(u=>u.startsWith("https://api.github.com/")));assert.equal(new URL(calls.find(u=>u.includes("/commits?"))).searchParams.get("per_page"),"100");
+ const month=await client.dashboard(["org/a"],undefined,{period:"month"});assert.equal(month.historyPages,3);
+});

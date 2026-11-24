@@ -112,10 +112,36 @@ try{
  await ev("document.querySelector('#timeline-clear').click()");
  assert.equal(await ev("document.querySelector('#timeline-summary').hidden"),true);
  await ev("const p=document.querySelector('#period');p.value='30';p.dispatchEvent(new Event('change'));");
- assert.equal(await ev("document.querySelectorAll('#project-timeline thead th').length"),31);
+ assert.equal(await ev("document.querySelectorAll('#project-timeline thead .timeline-date').length"),30);
  await ev("document.querySelector('#repo-filter').value='demo/mission';document.querySelector('#repo-filter').dispatchEvent(new Event('change'))");
  assert.equal(await ev("document.querySelectorAll('#project-timeline tbody tr').length"),1);
  await ev("document.querySelector('#repo-filter').value='';document.querySelector('#repo-filter').dispatchEvent(new Event('change'));document.querySelector('#period').value='7';document.querySelector('#period').dispatchEvent(new Event('change'));");
+ // Calendar grouping and historical loading are tested against the runtime's Bangkok date.
+ const localMonth=await ev("import('./period.mjs').then(m=>m.periodRange('month'))");
+ const localYear=await ev("import('./period.mjs').then(m=>m.periodRange('year'))");
+ const requestsBeforeHistory=await ev("window.fixtureRequests");
+ await ev("document.querySelector('#period').value='month';document.querySelector('#period').dispatchEvent(new Event('change'))");
+ await wait(()=>ev("!document.querySelector('#refresh').disabled && !document.querySelector('#download-html').disabled"),"month history loaded");
+ assert.equal(await ev("document.querySelectorAll('#project-timeline thead .timeline-date').length"),localMonth.dates.length);
+ assert.equal(await ev("document.querySelectorAll('#project-timeline .timeline-month-group').length"),2);
+ assert.equal(await ev("[...document.querySelectorAll('#project-timeline .timeline-month-group')].reduce((n,e)=>n+e.colSpan,0)"),localMonth.dates.length);
+ assert.equal(await ev("document.querySelector('#project-timeline thead .timeline-repo').rowSpan"),2);
+ assert.ok(await ev("document.querySelectorAll('#project-timeline thead .timeline-weekend').length")>=8);
+ assert.ok(await ev("[...document.querySelectorAll('#project-timeline thead .timeline-weekday')].every(e=>['จ.','อ.','พ.','พฤ.','ศ.','ส.','อา.'].includes(e.textContent))"));
+ assert.ok(await ev("window.fixtureRequests")>requestsBeforeHistory);
+ await noOverflow("Last Month timeline");await shot("10-last-month-1440");
+ await ev("document.querySelector('#period').value='year';document.querySelector('#period').dispatchEvent(new Event('change'))");
+ await wait(()=>ev("!document.querySelector('#refresh').disabled && !document.querySelector('#download-html').disabled"),"year history loaded");
+ assert.equal(await ev("document.querySelectorAll('#project-timeline thead .timeline-date').length"),localYear.dates.length);
+ assert.equal(await ev("document.querySelectorAll('#project-timeline .timeline-month-group,#project-timeline .timeline-weekend').length"),0);
+ assert.equal(await ev("document.querySelector('#activity-chart-title').textContent"),"Monthly Activity");
+ assert.equal(await ev("document.querySelector('#timeline-selected-label').textContent"),"SELECTED MONTH");
+ await ev("document.querySelector('#project-timeline button[data-day]').click()");
+ assert.equal(await ev("document.querySelector('#timeline-summary').children.length"),4);
+ await noOverflow("Last Year timeline");await shot("11-last-year-1440");
+ await ev("document.querySelector('#period').value='7';document.querySelector('#period').dispatchEvent(new Event('change'))");
+ assert.equal(await ev("document.querySelectorAll('#project-timeline thead .timeline-date').length"),7);
+
  for(const [w,h] of [[1024,768],[768,1024],[375,812],[812,375]]){
    await viewport(w,h);await delay(150);await noOverflow(w+"x"+h+" dashboard");assert.equal(await ev("document.querySelector('#analytics').hidden"),false);
    if(w===375){await shot("03-dashboard-375");await ev("document.querySelector('#manage-repos').click()");assert.equal(await ev("document.querySelector('#repo-dialog').open"),true);await noOverflow("mobile repository dialog");await shot("04-dialog-375");await ev("document.querySelector('#close-repos').click()");assert.equal(await ev("document.querySelector('#repo-dialog').open"),false);}

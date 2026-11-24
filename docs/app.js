@@ -2,12 +2,13 @@ import {createGitHubClient,isFineGrainedPAT,validRepo,MAX_REPOS} from "./github-
 import {renderAnalytics,resetAnalytics} from "./analytics-view.mjs";
 import {initTheme} from "./theme.mjs";
 import {downloadSnapshot} from "./snapshot.mjs";
+import {historyRequest,periodRange,CALENDAR_ZONE} from "./period.mjs";
 const $=id=>document.getElementById(id);
 initTheme();
 let token="",identity=null,data=null,request=null,expiryTimer=null,session=0;
 let available=[],selected=[],draft=new Set(),discoveryNote="";
 const state={view:"overview"};
-const safeDate = v => Number.isFinite(Date.parse(v)) ? new Date(v).toLocaleString("th-TH", {dateStyle:"medium",timeStyle:"short"}) : "—";
+const safeDate = v => Number.isFinite(Date.parse(v)) ? new Date(v).toLocaleString("th-TH", {dateStyle:"medium",timeStyle:"short",timeZone:CALENDAR_ZONE}) : "—";
 function el(tag, cls, text) { const n=document.createElement(tag); if(cls)n.className=cls; if(text!==undefined)n.textContent=String(text); return n; }
 function link(title, href) {
   const a=el("a","",title || "Untitled");
@@ -21,7 +22,7 @@ function notice(msg){$("notice").hidden=!msg;$("notice").textContent=msg||"";}
 function canExport(){return !!token&&!!data&&Number.isFinite(Date.parse(data.fetchedAt))&&!request&&!$("workspace").hidden;}
 function updateExport(){$("download-html").disabled=!canExport();if(!canExport()&&$("snapshot-dialog").open)$("snapshot-dialog").close();}
 function exportScope(){
-  return {view:state.view,scope:$("repo-filter").selectedOptions[0]?.textContent||"All repositories",period:$("period").selectedOptions[0]?.textContent||"",eventType:state.view==="dashboard"?$("analytics-type").selectedOptions[0]?.textContent:"",fetchedAt:data?.fetchedAt};
+  return {view:state.view,scope:$("repo-filter").selectedOptions[0]?.textContent||"All repositories",period:($("period").selectedOptions[0]?.textContent||"")+" · "+periodRange($("period").value,Date.parse(data.fetchedAt)).startDate+" – "+periodRange($("period").value,Date.parse(data.fetchedAt)).endDate+" · "+CALENDAR_ZONE,eventType:state.view==="dashboard"?$("analytics-type").selectedOptions[0]?.textContent:"",fetchedAt:data?.fetchedAt};
 }
 function openSnapshot(){
   if(!canExport())return;
@@ -121,24 +122,25 @@ async function addRepo(){
 }
 async function load(){
   if(!token||!identity)return;
-  const current=session;request?.abort();
+  const current=session,requestedPeriod=$("period").value;request?.abort();
   const controller=new AbortController();request=controller;
   $("refresh").disabled=true;updateExport();notice("กำลังอัปเดตข้อมูล...");
   try{
-    const result=await createGitHubClient(token,{signal:controller.signal}).dashboard([...selected],identity);
+    const result=await createGitHubClient(token,{signal:controller.signal}).dashboard([...selected],identity,{period:requestedPeriod});
     if(current!==session||controller.signal.aborted)return;
     data=result;
     const previous=$("repo-filter").value;
     $("repo-filter").replaceChildren(new Option("All repositories",""),...selected.map(n=>new Option(n,n)));
     if(selected.includes(previous))$("repo-filter").value=previous;
     $("updated").textContent="อัปเดต "+safeDate(data.fetchedAt);
-    const warnings=[discoveryNote,...data.errors.map(e=>e.repo+" · "+e.section+" ("+e.status+")")].filter(Boolean);
+    const warnings=[discoveryNote,...data.errors.map(e=>e.repo+" · "+e.section+" ("+e.status+")"),...(data.truncated||[]).map(e=>e.repo+" · "+e.section+" (sample limit)")].filter(Boolean);
     notice(warnings.length?"ข้อมูลบางส่วนไม่พร้อมใช้งาน\n"+warnings.join("\n"):"");
     render();
   }catch(e){
     if(current!==session||controller.signal.aborted)return;
     if(e.status===401){clearSession(errorText(e));return;}
-    notice(errorText(e)+(data?" · แสดงข้อมูลล่าสุดของเซสชันนี้":" · ยังไม่มีข้อมูล Dashboard"));
+    notice(errorText(e)+(data?" · แสดงข้อมูลที่โหลดไว้ในเซสชันนี้เท่านั้น":" · ยังไม่มีข้อมูล Dashboard"));
+    render();
   }finally{if(current===session&&request===controller){request=null;$("refresh").disabled=false;updateExport();}}
 }
 // Decorative, locally defined SVG icons; upstream strings never become markup.
@@ -162,19 +164,20 @@ function item(box, icon, title, href, meta, cls="") {
   row.append(badge);const body=el("div");body.append(link(title,href),el("div","meta",meta));row.append(body);box.append(row);
 }
 function renderDashboard(){
-  renderAnalytics(data,{names:selected,filter:$("repo-filter").value,days:Number($("period").value),onProject:name=>{if([...$("repo-filter").options].some(o=>o.value===name)){$("repo-filter").value=name;render();}}});
+  renderAnalytics(data,{names:selected,filter:$("repo-filter").value,period:$("period").value,onProject:name=>{if([...$("repo-filter").options].some(o=>o.value===name)){$("repo-filter").value=name;render();}}});
 }
 function render(){
   if(state.view==="dashboard")renderDashboard();
   if(!data)return;
-  const filter=$("repo-filter").value, days=Number($("period").value);
+  const filter=$("repo-filter").value,range=periodRange($("period").value,Number.isFinite(Date.parse(data.fetchedAt))?Date.parse(data.fetchedAt):Date.now());
   const match=name=>!filter||filter===name;
-  const cutoff=Date.now()-days*86400000;
+  const cutoff=range.start;
   const repos=data.repositories.filter(r=>match(r.name));
-  const events=data.activity.filter(e=>match(e.repo)&&Date.parse(e.at)>=cutoff);
+  const events=data.activity.filter(e=>match(e.repo)&&Date.parse(e.at)>=cutoff&&Date.parse(e.at)<=range.asOf);
   const issues=data.issues.filter(e=>match(e.repo)).sort((a,b)=>(a.blocked?0:a.rank+1)-(b.blocked?0:b.rank+1)||Date.parse(b.updatedAt)-Date.parse(a.updatedAt));
-  const issuesComplete=!data.errors.some(e=>match(e.repo)&&(e.section==="issues"||e.section==="repository"));
-  const commitsComplete=!data.errors.some(e=>match(e.repo)&&(e.section==="commits"||e.section==="repository"));
+  const gaps=[...data.errors,...(data.truncated||[])];
+  const issuesComplete=!gaps.some(e=>match(e.repo)&&(e.section==="issues"||e.section==="repository"));
+  const commitsComplete=!(Date.parse(data.historySince)>cutoff)&&!gaps.some(e=>match(e.repo)&&(e.section==="commits"||e.section==="repository"));
   $("m-repos").textContent=repos.length;
   $("m-commits").textContent=commitsComplete?events.filter(e=>e.type==="commit").length:events.filter(e=>e.type==="commit").length+"*";
   $("m-issues").textContent=issues.length+(issuesComplete?"":"*");
@@ -202,7 +205,11 @@ function switchView(view){
 
 document.querySelectorAll("[data-view]").forEach(b=>b.addEventListener("click",()=>switchView(b.dataset.view)));
 $("analytics-type").addEventListener("change",renderDashboard);
-$("period").addEventListener("change",render);$("repo-filter").addEventListener("change",render);
+$("period").addEventListener("change",()=>{
+  const needed=historyRequest($("period").value,data?.fetchedAt?Date.parse(data.fetchedAt):Date.now());
+  render();
+  if(token&&identity&&selected.length&&(request||!data||Date.parse(data.historySince)>Date.parse(needed.since)||(data.historyPages||0)<needed.pages))load();
+});$("repo-filter").addEventListener("change",render);
 $("download-html").addEventListener("click",openSnapshot);
 $("cancel-snapshot").addEventListener("click",()=>$("snapshot-dialog").close());
 $("confirm-snapshot").addEventListener("click",saveSnapshot);

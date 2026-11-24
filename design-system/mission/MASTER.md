@@ -14,3 +14,6 @@ GitHub PAT, API permissions, API client, analytics model and CSP unchanged. No b
 
 ## Download HTML snapshot
 Toolbar secondary action enabled only with a completed loaded snapshot. Explicit confirmation warns of unencrypted private project information. Static HTML preserves current active view, filters, theme, rendered chart SVG, selected-day detail, and full scrollable rows, with timestamps and read-only labeling. No hidden views, raw payload, PAT, login or refresh controls; CSSOM embeds local styles, no network requests. Native details can expand/collapse and GitHub links remain external references. Snapshot does not update or provide offline data storage.
+
+## Calendar periods
+Asia/Bangkok (ICT) calendar boundaries; date series anchored to the last successful load. Last Month: first of previous month through today, daily; Last Year: January 1 of previous year through today, monthly. Daily column date + Thai weekday, weekends tinted independently of heat levels; month groups span exact day counts using colspan and colgroup, sticky row headers, no grouped row in monthly mode. Daily/monthly chart, sparklines, event drill-down and export share the period. Extended loads have explicit bounded pagination and partial states, not complete audit histories. Current open-issue snapshot does not change with time filters.

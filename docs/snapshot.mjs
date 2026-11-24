@@ -1,8 +1,8 @@
 // Static, user-initiated export of the current rendered view. No data cache or API.
 const SVG="http://www.w3.org/2000/svg";
-const HTML_TAGS=new Set("div aside main section article header footer nav p h1 h2 h3 strong span small a table thead tbody tfoot tr th td meter details summary".split(" "));
+const HTML_TAGS=new Set("div aside main section article header footer nav p h1 h2 h3 strong span small a table colgroup col thead tbody tfoot tr th td meter details summary".split(" "));
 const SVG_TAGS=new Set("svg g path rect circle polyline polygon line text title desc".split(" "));
-const HTML_ATTRS=new Set("id class role title aria-label aria-current aria-pressed scope colspan rowspan min max value".split(" "));
+const HTML_ATTRS=new Set("id class role title aria-label aria-current aria-pressed scope colspan rowspan span min max value".split(" "));
 const SVG_ATTRS=new Set("class role aria-label aria-hidden focusable viewBox preserveAspectRatio width height x y x1 y1 x2 y2 cx cy r rx ry d points fill stroke stroke-width stroke-linecap stroke-linejoin stroke-dasharray opacity fill-opacity text-anchor font-size font-weight transform".split(" "));
 const OMIT=".toolbar-actions,.account,.skip-link,.analysis-controls,.expand-card,#timeline-clear,.nav:not(.active)";
 const STYLES=["style.css","auth.css","analytics.css"];
