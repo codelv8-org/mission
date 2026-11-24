@@ -23,7 +23,7 @@ jobs:
         run: |
           if [ -f package-lock.json ]; then npm ci --ignore-scripts --no-audit --no-fund; else npm install --ignore-scripts --no-audit --no-fund; fi
       - run: npm test
-      - run: node --check docs/app.js && bash -n deploy/setup-aapanel.sh deploy/mission-deploy.sh
+      - run: node --check docs/app.js && bash -n deploy/setup-aapanel.sh && bash -n deploy/mission-deploy.sh
 
   deploy:
     needs: test
