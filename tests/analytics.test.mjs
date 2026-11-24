@@ -42,5 +42,5 @@ test("dashboard navigation, analytics DOM contract, local-only rendering and res
  assert.match(app,/data=null;resetAnalytics\(\)/);
  assert.match(view,/button\.setAttribute\("aria-pressed"/);assert.match(view,/u\.hostname==="github\.com"/);
  assert.ok(!/innerHTML|outerHTML|insertAdjacentHTML|\bfetch\(|localStorage|sessionStorage/.test(view));
- assert.ok(!/@import|url\(\s*["']?https?:/.test(css));assert.match(layout,/--nav-index:4/);assert.match(layout,/height:calc\(\(100% - 40px\)\/5\)/);
+ assert.ok(!/@import|url\(\s*["']?https?:/.test(css));assert.match(layout,/\.nav\.active/);assert.match(layout,/\.sidebar nav \{ display:grid/);assert.match(css,/grid-template-columns:repeat\(12,minmax\(0,1fr\)\)/);
 });

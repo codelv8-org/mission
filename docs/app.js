@@ -169,7 +169,7 @@ function render(){
 }
 function switchView(view){
   state.view=view;const names={overview:"Overview",dashboard:"Dashboard",activity:"Timeline",priority:"Priority",repositories:"Repositories"};
-  $("view-title").textContent=names[view];$("headline").textContent=view==="overview"?"Your work, in focus.":names[view];
+  $("view-title").textContent=names[view];$("headline").textContent=view==="overview"?"Your work, in focus.":view==="dashboard"?"Project Analytics Dashboard":names[view];
   $("view-description").textContent=view==="dashboard"?"วิเคราะห์กิจกรรมและสัญญาณของโปรเจกต์จากข้อมูล GitHub ที่โหลดได้":"ติดตามโปรเจกต์และวางแผนงานจากข้อมูลจริงบน GitHub";
   $("metrics").hidden=view!=="overview";
   $("analytics").hidden=view!=="dashboard";

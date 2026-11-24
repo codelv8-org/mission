@@ -5,7 +5,7 @@ const TYPES=Object.freeze({commit:"Commit",pull:"Pull request",issue:"Issue upda
 const shortDate=date=>new Intl.DateTimeFormat("en-GB",{day:"2-digit",month:"short",timeZone:"UTC"}).format(new Date(date+"T00:00:00Z"));
 const dateTime=at=>Number.isFinite(Date.parse(at))?new Intl.DateTimeFormat("en-GB",{dateStyle:"medium",timeStyle:"short",timeZone:"UTC"}).format(new Date(at))+" UTC":"—";
 const text=(id,value)=>{$(id).textContent=String(value);};
-const boxIds=["project-timeline","activity-trend","activity-legend","daily-counts","priority-breakdown","active-projects","focus-next","workflow-signals","timeline-detail-list"];
+const boxIds=["timeline-summary","project-timeline","activity-trend","activity-legend","daily-counts","priority-breakdown","active-projects","focus-next","workflow-signals","timeline-detail-list"];
 let detail=null;
 function safeLink(title,href){
   const a=el("a","analysis-link",title||"Untitled");
@@ -20,11 +20,12 @@ function bar(value,max,cls){
 function displayDetail(model,repo,date){
   const cell=model.projects.find(p=>p.name===repo)?.cells.find(c=>c.date===date);
   detail=cell?.events.length?{repo,date}:null;
-  const out=$("timeline-detail-list");out.replaceChildren();
+  const out=$("timeline-detail-list"),summary=$("timeline-summary");out.replaceChildren();summary.replaceChildren();summary.hidden=!detail;
   $("timeline-clear").hidden=!detail;
   for(const button of $("project-timeline").querySelectorAll("button[data-day]"))button.setAttribute("aria-pressed",String(!!detail&&button.dataset.day===date&&button.dataset.repo===repo));
   if(!detail){text("timeline-detail-title","เลือกช่องกิจกรรม");empty(out,"กดช่องที่มีจำนวนกิจกรรมเพื่อดูรายการ");return;}
   text("timeline-detail-title",repo+" · "+shortDate(date)+" · "+cell.events.length+" events");
+  for(const type of EVENT_TYPES){const chip=el("div","summary-chip type-"+type);chip.append(el("span","",TYPES[type]),el("strong","",cell.events.filter(e=>e.type===type).length));summary.append(chip); }
   for(const event of cell.events){
     const row=el("div","analysis-event"),label=el("span","event-type type-"+event.type,TYPES[event.type]);
     const body=el("div","analysis-event-body");body.append(safeLink(event.title,event.url),el("p","muted",dateTime(event.at)+(event.status?" · "+event.status:"")));
@@ -58,15 +59,16 @@ function renderTrend(model){
   const types=model.type==="all"?EVENT_TYPES:[model.type],max=Math.max(1,...model.daily.map(d=>d.total));
   if(!model.filteredTotal){empty(root,model.timelinePartial?"ยังไม่มีรายการที่โหลดได้ (ข้อมูลบางส่วนไม่พร้อมใช้งาน)":"ไม่พบกิจกรรมที่โหลดได้ในช่วงเวลานี้");}
   else{
-    const w=620,h=208,x0=36,y0=168,plotW=570,plotH=145,step=plotW/model.days,bw=Math.min(36,step*.72);
+    const w=model.days===7?460:620,h=248,x0=32,y0=199,plotW=w-46,plotH=165,step=plotW/model.days,bw=Math.min(44,step*.68);
     const svg=svgNode("svg",{viewBox:"0 0 "+w+" "+h,class:"trend-svg",role:"img","aria-label":"Daily observed activity, "+model.days+" days, UTC, peak "+max+" events. Daily counts available below."});
     for(const n of [...new Set([0,Math.ceil(max/2),max])].sort((a,b)=>a-b)){const y=y0-n/max*plotH;svg.append(svgNode("line",{x1:x0,y1:y,x2:w-14,y2:y,class:"trend-gridline"}),svgNode("text",{x:x0-7,y:y+4,"text-anchor":"end",class:"trend-label"},n));}
     model.daily.forEach((day,i)=>{
       let bottom=y0;const x=x0+i*step+(step-bw)/2;
       for(const t of types){const count=day.counts[t];if(!count)continue;const height=count/max*plotH;bottom-=height;const r=svgNode("rect",{x,y:bottom,width:bw,height,class:"trend-bar-"+t});r.append(svgNode("title",{},day.date+" · "+TYPES[t]+" · "+count));svg.append(r);}
+      if(day.total&&model.days===7)svg.append(svgNode("text",{x:x+bw/2,y:bottom-6,"text-anchor":"middle",class:"trend-total"},day.total));
       if(model.days===7||i===0||i===model.days-1||i%7===0)svg.append(svgNode("text",{x:x0+(i+.5)*step,y:y0+19,"text-anchor":"middle",class:"trend-label"},day.date.slice(8)));
     });
-    svg.append(svgNode("text",{x:606,y:201,"text-anchor":"end",class:"trend-label"},"Day (UTC)"));root.append(svg);
+    svg.append(svgNode("text",{x:w-14,y:239,"text-anchor":"end",class:"trend-label"},"Day (UTC)"));root.append(svg);
   }
   for(const type of types){const entry=el("span","trend-legend-item");entry.append(el("span","trend-key trend-bar-"+type),el("span","",TYPES[type]));legend.append(entry);}
   const table=el("table","daily-table"),head=el("thead"),hr=el("tr");
@@ -76,7 +78,7 @@ function renderTrend(model){
 function renderPriority(model){
   const root=$("priority-breakdown");root.replaceChildren();
   const top=el("div","breakdown-total");top.append(el("strong","analysis-number",mark(model.issueTotal,model.issuePartial)),el("span","muted","Open issues in sample"));root.append(top);
-  for(const item of model.breakdown){const row=el("div","analysis-bar-row"),label=el("div","analysis-bar-label");label.append(el("span","",item.label),el("strong","",item.count));row.append(label,bar(item.count,model.issueTotal,"meter-"+item.label.toLowerCase()));root.append(row);}
+  for(const item of model.breakdown){const row=el("div","analysis-bar-row"),label=el("div","analysis-bar-label");label.append(el("span","",item.label),el("strong","",item.count+(model.issueTotal?" ("+Math.round(item.count/model.issueTotal*100)+"%)":"")));row.append(label,bar(item.count,model.issueTotal,"meter-"+item.label.toLowerCase()));root.append(row);}
   root.append(el("div","blocked-line","Blocked: "+mark(model.blocked,model.issuePartial)+" · may overlap priority labels"));
   text("priority-coverage",(model.issuePartial?"* บาง Repository โหลด Open Issue ไม่สำเร็จ · ":"")+"Open Issue snapshot ปัจจุบัน ไม่เปลี่ยนตามตัวกรอง 7/30 วัน");
 }
@@ -84,8 +86,8 @@ function renderProjects(model,onProject){
   const root=$("active-projects");root.replaceChildren();
   const active=[...model.projects].filter(p=>p.total>0).sort((a,b)=>b.total-a.total||a.name.localeCompare(b.name)).slice(0,8);
   if(!active.length){empty(root,"ไม่พบกิจกรรมที่โหลดได้ในช่วงเวลานี้");return;}
-  for(const p of active){
-    const row=el("div","analysis-bar-row"),label=el("div","analysis-bar-label"),button=el("button","analysis-project-link",p.name);button.type="button";button.setAttribute("aria-label","Filter dashboard to "+p.name);button.addEventListener("click",()=>onProject(p.name));label.append(button,el("strong","",mark(p.total,p.activityPartial)));row.append(label,bar(p.total,active[0].total,"meter-project"),el("small","muted","Latest observed · "+dateTime(p.latest?.at)));root.append(row);
+  for(const [index,p] of active.entries()){
+    const row=el("div","analysis-bar-row"),label=el("div","analysis-bar-label"),button=el("button","analysis-project-link",p.name);button.type="button";button.setAttribute("aria-label","Filter dashboard to "+p.name);button.addEventListener("click",()=>onProject(p.name));const rank=el("span","project-rank",index+1);label.append(rank,button,el("strong","",mark(p.total,p.activityPartial)));row.append(label,bar(p.total,active[0].total,"meter-project"),el("small","muted","Latest observed · "+dateTime(p.latest?.at)));root.append(row);
   }
 }
 function renderFocus(model){
@@ -112,6 +114,7 @@ export function resetAnalytics(){
   for(const id of boxIds)$(id).replaceChildren();
   $("analytics-type").value="all";
   $("timeline-clear").hidden=true;
+  $("timeline-summary").hidden=true;
   $("timeline-clear").onclick=null;
   $("analytics-cards").hidden=true;$("analytics-empty").hidden=false;
   $("analytics-empty").textContent="เชื่อมต่อและโหลด Repository เพื่อดูผลการวิเคราะห์";
