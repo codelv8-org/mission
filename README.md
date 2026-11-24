@@ -1,26 +1,51 @@
-# MISSION — Developer Mission Control
+# MISSION — GitHub Pages Edition
 
-Google-authenticated GitHub portfolio and activity workspace. Deployment target: **aaPanel (Ubuntu/Debian), Node.js 22+, Nginx reverse proxy, systemd, GitHub Actions**. Cloudflare Worker and GitHub Pages are no longer required.
+Developer Mission Control. GitHub Pages frontend, GitHub App sign-in and a small managed Cloudflare Worker. No aaPanel, SSH, Google OAuth, shared PAT, database or self-hosted runner.
 
-## MVP
-Overview, recent Activity Timeline (7/30 days), Priority Queue from P0–P3/blocked labels, repository portfolio and GitHub read-only monitoring of up to eight configured repositories. Google ID tokens are verified on the server using jose with an explicit verified account allowlist. Public frontend shell contains no private GitHub data or credentials. No database, background sync, or write access.
+## Setup once
 
-## One-time deployment
+### 1. Register and install a GitHub App
+Open https://github.com/settings/apps/new (or the organization GitHub App settings).
+- App name: Mission (unique name required).
+- Homepage URL: https://codelv8-org.github.io/mission/
+- Callback URL: https://codelv8-org.github.io/mission/ (exact trailing slash)
+- Leave device flow and installation-time user authorization disabled. Disable Webhook (no events needed).
+- Keep expiring user access tokens enabled.
+- Repository permissions, read-only: Metadata, Contents, Issues, Pull requests, Actions. No write or administration permissions, no organization/account permissions needed.
+- Choose Only on this account if all repositories are within the app owner's account. For other owners, allow installation on other accounts and obtain the appropriate approval.
+- Create app, generate a Client Secret and note its Client ID (not App ID). No private key is needed for this user authorization flow.
+- Install the app on selected repositories. Every logged-in user can only access repositories allowed by both their own account and this app.
 
-Example domain: `mission.codelv8.com`; replace with your actual domain.
+### 2. Deploy the managed API (no own server)
+From the repository root on an admin computer with Node.js 22+:
 
-1. In Google Cloud Console, add `https://mission.codelv8.com` to Authorized JavaScript origins of the existing web OAuth client. No client secret or redirect URI is required for this popup ID-token flow. Keep test users configured if needed.
-2. Prepare a fine-grained read-only GitHub PAT for selected repositories (Metadata, Contents, Issues, Pull requests, Actions). Do not paste it into chat, commit it, or add it to the deployment workflow.
-3. Follow [aaPanel deployment guide](deploy/README.md). Set the Google client ID, authorized email(s), PAT and repository list once in `/etc/mission/mission.env` on the host. The browser receives only its public config dynamically.
-4. Create an HTTPS aaPanel reverse proxy to `http://127.0.0.1:3107`. Enable TLS; ensure the port is available. Disable proxy caching for this site and set a read timeout of at least 120s. Do not point a public web root to the source directory.
-5. Install the aaPanel Webhook plugin and create a fixed Mission deployment hook. Configure AAPANEL_PANEL_URL (variable) and AAPANEL_WEBHOOK_KEY (secret) in GitHub Actions. The workflow uses aaPanel Auto Deploy v4 pinned to its reviewed commit. Run it manually once. Subsequent pushes to main auto-test and trigger the webhook. No incoming SSH access is needed.
+    npm install
+    npx wrangler login
+    npm run deploy:api
 
-Disable the old Pages publication in Settings → Pages; the old public shell does not contain production data. Do not serve the same configuration on an unrelated origin.
+Open the Worker mission-api in Cloudflare dashboard. Under Settings > Variables and Secrets configure:
+- GITHUB_CLIENT_ID: GitHub App Client ID.
+- GITHUB_CLIENT_SECRET: GitHub App Client Secret (secret).
+- GITHUB_ALLOWED_USERS: exact GitHub usernames or numeric account IDs, comma-separated (prefer stable numeric IDs, e.g. 281293853 if that is the intended CodeLV8 account). Empty denies all.
+- GITHUB_REPOSITORIES: optional comma-separated owner/repo list (max 8). If omitted, discover authorized GitHub App installations and show up to 7 most recently pushed repositories from the discovered sample.
 
-## Local development
-`npm install`, `npm test`. The server requires valid environment configuration before starting; production service binds to localhost only.
+The APP_URL variable is already set to the Pages URL. Do not put credentials in Git or in the frontend. Only the Client ID is returned from /api/config. No separate PAT or refresh-token storage. Copy the HTTPS workers.dev origin from the deployment output.
 
-## Scope
-The timeline is a bounded recent sample from the default branch commits, latest updated PRs/issues, and workflow runs. The priority queue is a separate sample of the latest 100 open issue/PR results per repository with PRs excluded, irrespective of age. This is not a full audit or complete backlog. One PAT may not cover several resource owners; future GitHub App support can address that. Private data is protected by the API; login shell and client-side assets are public by design. The eight-repository bound remains for latency and GitHub quotas, not a Cloudflare limit.
+### 3. Point Pages to API
+Set only apiBase in docs/config.js to the Worker HTTPS origin (no path), commit to main. Existing GitHub Pages source main /docs publishes automatically. If disabled, re-enable in Settings > Pages. Open https://codelv8-org.github.io/mission/ and use Sign in with GitHub.
 
-See [SECURITY.md](SECURITY.md).
+## Security and scope
+This uses authorization code + PKCE and state; the Worker exchanges the code with the confidential GitHub App secret. The GitHub access token is encrypted in a short-lived AES-GCM session; the browser receives only that opaque bearer session in memory, not the GitHub token. The session lasts up to one hour; refresh and local sign-out require a new sign-in. The Worker verifies /user and the explicit account allowlist before serving any data. No write access. Public Pages assets remain public; private GitHub data never enters the published repository. Use a dedicated Pages origin for production if other projects on the same github.io origin are untrusted. Protect main.
+
+The Dashboard shows a bounded recent sample: default branch commits, recent PRs/issues/workflow runs, and up to 100 open issue/PR results per repository (PRs excluded). Auto-discovery checks up to four installations and one page of up to 100 repositories per installation, then displays seven; optional explicit list supports eight. Limits keep Worker subrequests bounded. No complete audit history, automatic AI summaries, background sync or project-editing functionality. Read-only permissions and organization approval may affect available data.
+
+## Test and publish
+`npm test` uses mocked GitHub calls; the CI workflow tests on main and PRs without deploying to external infrastructure. GitHub Pages deploys via its existing main /docs branch setting. For real testing, verify allowlisted login, unlisted account denial, missing/invalid session 401, correct repository access and logout. Cloudflare Worker and GitHub App registration must still be configured once; tests do not validate real credentials.
+
+## Migration
+The aaPanel deployment workflow and scripts have been removed. If previously configured, remove old AAPANEL_WEBHOOK_KEY and related deployment variables in GitHub, disable the Mission webhook in aaPanel, and revoke unused Google OAuth credentials or PATs if dedicated to Mission. No old hosting deployment is triggered by this repository.
+
+References:
+- https://docs.github.com/en/apps/creating-github-apps/authenticating-with-a-github-app/generating-a-user-access-token-for-a-github-app
+- https://docs.github.com/en/rest/apps/installations
+- https://developers.cloudflare.com/workers/configuration/secrets/

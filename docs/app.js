@@ -17,31 +17,63 @@ function clearSession(msg="ออกจากระบบแล้ว") {
   session++; if(request)request.abort();request=null;clearTimeout(expiryTimer); token="";data=null;
   ["activity-list","priority-list","repo-list"].forEach(id=>$(id).replaceChildren());
   ["m-repos","m-commits","m-issues","m-priority"].forEach(id=>$(id).textContent="—");
-  $("account-email").textContent="";$("updated").textContent="";$("repo-filter").replaceChildren(new Option("All repositories",""));notice("");
+  $("account-login").textContent="";$("updated").textContent="";$("repo-filter").replaceChildren(new Option("All repositories",""));notice("");
   $("workspace").hidden=true;$("login").hidden=false;$("refresh").disabled=false;
-  if(window.google?.accounts?.id)window.google.accounts.id.disableAutoSelect();
+  $("github-login").disabled=!authConfig;
   message(msg);
 }
-function setup() {
-  try {
-    if(!/^[a-zA-Z0-9._-]+\.apps\.googleusercontent\.com$/.test(config.googleClientId||""))throw Error();
+const FLOW_KEY="mission.github.oauth.v1";
+let authConfig=null;
+const encode64=bytes=>btoa(String.fromCharCode(...new Uint8Array(bytes))).replaceAll("+","-").replaceAll("/","_").replace(/=+$/,"");
+const random=()=>encode64(crypto.getRandomValues(new Uint8Array(32)));
+async function beginLogin(){
+  if(!authConfig)return;
+  $("github-login").disabled=true;
+  try{
+    const state=random(),verifier=random();
+    const challenge=encode64(await crypto.subtle.digest("SHA-256",new TextEncoder().encode(verifier)));
+    sessionStorage.setItem(FLOW_KEY,JSON.stringify({state,verifier,created:Date.now()}));
+    const url=new URL("https://github.com/login/oauth/authorize");
+    url.search=new URLSearchParams({client_id:authConfig.clientId,redirect_uri:authConfig.callbackUrl,state,code_challenge:challenge,code_challenge_method:"S256",scope:"offline_access",allow_signup:"false"});
+    location.assign(url.href);
+  }catch{message("ไม่สามารถเริ่ม GitHub Login ได้ โปรดเปิดใช้ session storage และลองใหม่");$("github-login").disabled=false;}
+}
+async function setup(){
+  const query=new URLSearchParams(location.search);
+  const callback=query.has("code")||query.has("error")||query.has("state");
+  const code=query.get("code"),returnedState=query.get("state");
+  let flow=null;
+  if(callback){
+    try{flow=JSON.parse(sessionStorage.getItem(FLOW_KEY)||"null");sessionStorage.removeItem(FLOW_KEY);}catch{}
+    history.replaceState(null,"",location.pathname);
+  }
+  try{
     const u=new URL(config.apiBase);if(u.protocol!=="https:"||u.pathname!=="/"||u.search||u.hash||u.username||u.password)throw Error();
     api=u.origin;
-  } catch {message("ยังไม่พร้อมใช้งาน: ผู้ดูแลต้องตั้งค่า Google Client ID และ Protected API ใน config.js");return;}
-  const script=document.createElement("script");script.src="https://accounts.google.com/gsi/client";script.async=true;
-  script.onload=()=>{
-    google.accounts.id.initialize({client_id:config.googleClientId,callback:signIn,auto_select:false,ux_mode:"popup"});
-    google.accounts.id.renderButton($("google-button"),{theme:"outline",size:"large",shape:"rectangular",text:"signin_with",width:Math.min(350,$("google-button").clientWidth||320)});
-    message("กรุณาเลือกบัญชีที่ได้รับอนุญาต");
-  };
-  script.onerror=()=>message("ไม่สามารถโหลด Google Sign-In ได้");document.head.append(script);
+    const res=await fetch(api+"/api/config",{cache:"no-store",credentials:"omit",redirect:"error"});
+    if(!res.ok)throw Error();
+    const cfg=await res.json();
+    const expected=location.origin+location.pathname;
+    if(typeof cfg.clientId!=="string"||!cfg.clientId||cfg.callbackUrl!==expected)throw Error();
+    authConfig=cfg;
+    $("github-login").disabled=false;
+  }catch{message("ยังไม่พร้อมใช้งาน: ตรวจสอบ Worker URL ใน config.js และ GitHub App configuration");return;}
+  if(!callback){message("กรุณาเข้าสู่ระบบด้วย GitHub");return;}
+  if(query.has("error")||!code||!flow||!returnedState||returnedState!==flow.state||Date.now()-flow.created>600000||Date.now()<flow.created||!/^[A-Za-z0-9_-]{43}$/.test(flow.verifier||"")){
+    message("การยืนยันตัวตนถูกยกเลิกหรือหมดอายุ กรุณาเข้าสู่ระบบใหม่");return;
+  }
+  $("github-login").disabled=true;message("กำลังยืนยันสิทธิ์ GitHub...");
+  try{
+    const res=await fetch(api+"/api/auth/exchange",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({code,verifier:flow.verifier}),cache:"no-store",credentials:"omit",redirect:"error"});
+    if(res.status===403){clearSession("บัญชี GitHub นี้ไม่ได้รับอนุญาต");return;}
+    if(!res.ok)throw Error();
+    const result=await res.json();
+    if(typeof result.session!=="string"||!result.session)throw Error();
+    token=result.session;
+    await load(true);
+  }catch{clearSession("ยืนยันตัวตนไม่สำเร็จ กรุณาเข้าสู่ระบบใหม่");}
 }
-async function signIn(response) {
-  if(!response?.credential){message("ไม่พบข้อมูลยืนยันตัวตน");return;}
-  clearSession("กำลังยืนยันสิทธิ์กับ API...");
-  token=response.credential;
-  await load(true);
-}
+$("github-login").addEventListener("click",beginLogin);
 async function load(initial=false){
   if(!token)return;
   const current=session;
@@ -56,9 +88,9 @@ async function load(initial=false){
     if(!res.ok)throw Error("API unavailable ("+res.status+")");
     const result=await res.json();
     if(current!==session||controller.signal.aborted)return;
-    if(!result.user?.email||!Number.isFinite(result.user.expiresAt)||result.user.expiresAt*1000<=Date.now()||!Array.isArray(result.repositories)||!Array.isArray(result.activity)||!Array.isArray(result.issues)||!Array.isArray(result.errors))throw Error("Invalid API response");
+    if(!result.user?.login||!Number.isFinite(result.user.expiresAt)||result.user.expiresAt*1000<=Date.now()||!Array.isArray(result.repositories)||!Array.isArray(result.activity)||!Array.isArray(result.issues)||!Array.isArray(result.errors))throw Error("Invalid API response");
     data=result;
-    $("account-email").textContent=data.user.email;
+    $("account-login").textContent=("@"+data.user.login);
     clearTimeout(expiryTimer);expiryTimer=setTimeout(()=>clearSession("เซสชันหมดอายุ กรุณาเข้าสู่ระบบใหม่"),Math.max(0,data.user.expiresAt*1000-Date.now()));
     const selected=$("repo-filter").value;
     $("repo-filter").replaceChildren(new Option("All repositories",""),...data.repositories.map(r=>new Option(r.name,r.name)));
