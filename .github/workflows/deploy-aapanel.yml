@@ -27,28 +27,52 @@ jobs:
 
   deploy:
     needs: test
-    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main' && vars.DEPLOY_HOST != ''
+    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main' && vars.AAPANEL_PANEL_URL != ''
     runs-on: ubuntu-latest
     timeout-minutes: 15
     concurrency:
       group: mission-production
       cancel-in-progress: false
-    env:
-      DEPLOY_HOST: ${{ vars.DEPLOY_HOST }}
-      DEPLOY_PORT: ${{ vars.DEPLOY_PORT || '22' }}
-      DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
-      DEPLOY_KNOWN_HOSTS: ${{ secrets.DEPLOY_KNOWN_HOSTS }}
     steps:
-      - name: Deploy current main SHA using restricted SSH key
+      - name: Validate webhook configuration
+        env:
+          PANEL_URL: ${{ vars.AAPANEL_PANEL_URL }}
+          WEBHOOK_KEY: ${{ secrets.AAPANEL_WEBHOOK_KEY }}
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          import os
+          from urllib.parse import urlsplit
+          url = os.environ["PANEL_URL"]
+          parts = urlsplit(url)
+          assert parts.scheme == "https" and parts.hostname and not parts.username and not parts.password
+          assert not parts.path and not parts.query and not parts.fragment
+          assert not any(c.isspace() for c in url)
+          assert os.environ["WEBHOOK_KEY"].strip(), "Missing AAPANEL_WEBHOOK_KEY"
+          PY
+      - name: Trigger aaPanel webhook
+        # aaPanel Auto Deploy v4. Pin the reviewed upstream commit.
+        uses: tunnaduong/aapanel-deploy-action@97d3df96ab171c9eaedb91f76664f0a478c1a790
+        with:
+          panel_url: ${{ vars.AAPANEL_PANEL_URL }}
+          webhook_key: ${{ secrets.AAPANEL_WEBHOOK_KEY }}
+        env:
+          # needs: test is the CI gate; no extra GitHub token needed.
+          GITHUB_TOKEN: ''
+      - name: Verify deployed revision (optional public HTTPS health endpoint)
+        if: vars.MISSION_URL != ''
+        env:
+          MISSION_URL: ${{ vars.MISSION_URL }}
         shell: bash
         run: |
           set -Eeuo pipefail
-          [[ "$DEPLOY_HOST" =~ ^[A-Za-z0-9][A-Za-z0-9.-]*$ ]]
-          [[ "$DEPLOY_PORT" =~ ^[0-9]+$ ]] && ((10#$DEPLOY_PORT >= 1 && 10#$DEPLOY_PORT <= 65535))
-          [[ -n "$DEPLOY_SSH_KEY" && -n "$DEPLOY_KNOWN_HOSTS" ]]
-          umask 077
-          sshdir="$(mktemp -d)"
-          trap 'rm -rf "$sshdir"' EXIT
-          printf '%s\n' "$DEPLOY_SSH_KEY" > "$sshdir/key"
-          printf '%s\n' "$DEPLOY_KNOWN_HOSTS" > "$sshdir/known_hosts"
-          ssh -T -i "$sshdir/key" -p "$DEPLOY_PORT" -o BatchMode=yes -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$sshdir/known_hosts" -o ConnectTimeout=15 "mission-deploy@$DEPLOY_HOST" "$GITHUB_SHA"
+          [[ "$MISSION_URL" == https://* && "$MISSION_URL" != */ ]]
+          for attempt in $(seq 1 60); do
+            if curl --fail --silent --show-error --max-time 5 "$MISSION_URL/healthz" | jq -e --arg sha "$GITHUB_SHA" '.status == "ok" and .revision == $sha' >/dev/null; then
+              echo "Verified deployed revision $GITHUB_SHA"
+              exit 0
+            fi
+            sleep 5
+          done
+          echo "::error::Webhook was triggered but the expected revision could not be verified. Check aaPanel webhook output, service logs, and whether main advanced."
+          exit 1

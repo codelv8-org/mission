@@ -13,7 +13,7 @@ Example domain: `mission.codelv8.com`; replace with your actual domain.
 2. Prepare a fine-grained read-only GitHub PAT for selected repositories (Metadata, Contents, Issues, Pull requests, Actions). Do not paste it into chat, commit it, or add it to the deployment workflow.
 3. Follow [aaPanel deployment guide](deploy/README.md). Set the Google client ID, authorized email(s), PAT and repository list once in `/etc/mission/mission.env` on the host. The browser receives only its public config dynamically.
 4. Create an HTTPS aaPanel reverse proxy to `http://127.0.0.1:3107`. Enable TLS; ensure the port is available. Disable proxy caching for this site and set a read timeout of at least 120s. Do not point a public web root to the source directory.
-5. Configure the restricted deployment SSH key and host verification in GitHub Actions, then run the workflow manually once. Subsequent pushes to main auto-test and deploy.
+5. Install the aaPanel Webhook plugin and create a fixed Mission deployment hook. Configure AAPANEL_PANEL_URL (variable) and AAPANEL_WEBHOOK_KEY (secret) in GitHub Actions. The workflow uses aaPanel Auto Deploy v4 pinned to its reviewed commit. Run it manually once. Subsequent pushes to main auto-test and trigger the webhook. No incoming SSH access is needed.
 
 Disable the old Pages publication in Settings → Pages; the old public shell does not contain production data. Do not serve the same configuration on an unrelated origin.
 

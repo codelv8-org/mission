@@ -47,7 +47,10 @@ export function createMissionServer(rawEnv){
         return;
       }
       if(!["GET","HEAD"].includes(req.method))return json(405,{error:"method_not_allowed"});
-      if(path==="/healthz")return json(200,{status:"ok"});
+      if(path==="/healthz"){
+        const raw=(await readFile(new URL("../.mission-release",import.meta.url),"utf8").catch(()=>"")).trim();
+        return json(200,{status:"ok",revision:/^[0-9a-f]{40}$/.test(raw)?raw:null});
+      }
       if(path==="/config.js"){
         const config={googleClientId:env.GOOGLE_CLIENT_ID,apiBase:env.APP_ORIGIN};
         return send(200,"text/javascript; charset=utf-8","window.MISSION_CONFIG = Object.freeze("+JSON.stringify(config)+");\n");
