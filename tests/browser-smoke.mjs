@@ -60,7 +60,7 @@ try{
  const viewport=(width,height)=>send("Emulation.setDeviceMetricsOverride",{width,height,deviceScaleFactor:1,mobile:false});
  const shot=async(name)=>{const r=await send("Page.captureScreenshot",{format:"png",captureBeyondViewport:false});await writeFile(join(out,name+".png"),Buffer.from(r.data,"base64"));};
  const noOverflow=async(label)=>{const v=await ev("({scroll:document.documentElement.scrollWidth,width:innerWidth})");assert.ok(v.scroll<=v.width+1,label+" overflow: "+JSON.stringify(v));};
- await send("Page.enable");await send("Runtime.enable");await send("Page.addScriptToEvaluateOnNewDocument",{source:"("+installFixture.toString()+")()"});
+ await send("Page.enable");await send("Runtime.enable");await send("Emulation.setEmulatedMedia",{features:[{name:"prefers-color-scheme",value:"light"}]});await send("Page.addScriptToEvaluateOnNewDocument",{source:"("+installFixture.toString()+")()"});
  await viewport(1440,1000);await send("Page.navigate",{url});await wait(()=>ev("document.readyState==='complete' && !!document.querySelector('#github-login')"),"login page");await noOverflow("desktop login");await shot("01-login-1440");
  await ev("document.querySelector('#pat-input').value='github_pat_'+'a'.repeat(40); document.querySelector('#github-login').click()");
  await wait(()=>ev("!document.querySelector('#workspace').hidden && document.querySelector('#m-repos').textContent==='5'"),"fixture login and repository data");
@@ -69,8 +69,20 @@ try{
  const layout=await ev("(()=>{const r=s=>document.querySelector(s).getBoundingClientRect();return {timeline:r('.analysis-timeline').top,trend:r('.analysis-trend').top,lower:['.analysis-priority','.analysis-projects','.analysis-focus','.analysis-workflows'].map(s=>r(s).top)}})()");
  assert.ok(Math.abs(layout.timeline-layout.trend)<2,"timeline and daily chart share a row");assert.ok(layout.lower.every(y=>Math.abs(y-layout.lower[0])<2),"four lower blocks share a row");
  const material=await ev("(()=>{const s=getComputedStyle(document.querySelector('#analytics-active-card'));const body=getComputedStyle(document.body);return {bg:s.backgroundColor,border:s.borderTopWidth,ink:s.borderTopColor,shadow:s.boxShadow,radius:s.borderTopLeftRadius,image:s.backgroundImage,canvas:body.backgroundColor}})()");
- assert.equal(material.bg,"rgb(78, 205, 196)");assert.equal(material.border,"3px");assert.equal(material.ink,"rgb(17, 17, 17)");assert.match(material.shadow,/5px 5px 0px/);assert.equal(material.radius,"4px");assert.equal(material.image,"none");assert.equal(material.canvas,"rgb(255, 253, 245)");
+ assert.equal(material.bg,"rgb(255, 255, 255)");assert.equal(material.border,"1px");assert.equal(material.ink,"rgb(226, 229, 236)");assert.equal(material.radius,"14px");assert.equal(material.image,"none");assert.equal(material.canvas,"rgb(244, 245, 248)");
  await noOverflow("1440 dashboard");await shot("02-dashboard-1440");
+ assert.equal(await ev("document.querySelectorAll('.kpi-spark svg').length"),2);
+ await ev("document.querySelector('#workspace-theme').value='dark';document.querySelector('#workspace-theme').dispatchEvent(new Event('change'))");
+ assert.equal(await ev("document.documentElement.dataset.theme"),"dark");
+ assert.equal(await ev("getComputedStyle(document.querySelector('#analytics-active-card')).backgroundColor"),"rgb(27, 30, 37)");
+ assert.equal(await ev("getComputedStyle(document.body).backgroundColor"),"rgb(17, 19, 24)");
+ assert.equal(await ev("document.querySelector('#login-theme').value"),"dark");await noOverflow("dark desktop dashboard");await shot("05-dashboard-dark-1440");
+ await ev("document.querySelector('[data-expand=timeline-card]').click()");
+ assert.equal(await ev("document.querySelector('#timeline-card').classList.contains('is-expanded')"),true);
+ assert.equal(await ev("document.querySelector('[data-expand=timeline-card]').getAttribute('aria-expanded')"),"true");
+ await noOverflow("expanded timeline");await ev("document.querySelector('[data-expand=timeline-card]').click()");
+ assert.equal(await ev("document.querySelector('#timeline-card').classList.contains('is-expanded')"),false);
+ await ev("document.querySelector('#workspace-theme').value='light';document.querySelector('#workspace-theme').dispatchEvent(new Event('change'))");
  await ev("document.querySelector('#project-timeline button[data-day]').click()");
  assert.equal(await ev("document.querySelector('#timeline-summary').children.length"),4);assert.equal(await ev("document.querySelectorAll('#project-timeline button[aria-pressed=true]').length"),1);
  await ev("document.querySelector('#timeline-clear').click()");
@@ -84,7 +96,11 @@ try{
    await viewport(w,h);await delay(150);await noOverflow(w+"x"+h+" dashboard");assert.equal(await ev("document.querySelector('#analytics').hidden"),false);
    if(w===375){await shot("03-dashboard-375");await ev("document.querySelector('#manage-repos').click()");assert.equal(await ev("document.querySelector('#repo-dialog').open"),true);await noOverflow("mobile repository dialog");await shot("04-dialog-375");await ev("document.querySelector('#close-repos').click()");assert.equal(await ev("document.querySelector('#repo-dialog').open"),false);}
  }
- await send("Emulation.setEmulatedMedia",{features:[{name:"prefers-reduced-motion",value:"reduce"}]});
+ await ev("document.querySelector('#workspace-theme').value='system';document.querySelector('#workspace-theme').dispatchEvent(new Event('change'))");
+ await send("Emulation.setEmulatedMedia",{features:[{name:"prefers-reduced-motion",value:"reduce"},{name:"prefers-color-scheme",value:"dark"}]});
+ await wait(()=>ev("document.documentElement.dataset.theme==='dark'"),"system dark");
+ await viewport(375,812);await noOverflow("dark mobile dashboard");await shot("06-dashboard-dark-375");
+ await ev("document.querySelector('#manage-repos').click()");await noOverflow("dark mobile dialog");await shot("07-dialog-dark-375");await ev("document.querySelector('#close-repos').click()");
  assert.equal(await ev("getComputedStyle(document.querySelector('#refresh')).transitionDuration"),"0s");
  await ev("document.querySelector('#logout').click()");
  assert.equal(await ev("document.querySelector('#analytics-cards').hidden && document.querySelector('#timeline-summary').children.length===0 && document.querySelector('#pat-input').value==='' && document.querySelector('#workspace').hidden"),true);

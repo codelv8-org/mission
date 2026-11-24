@@ -1,6 +1,8 @@
 import {createGitHubClient,isFineGrainedPAT,validRepo,MAX_REPOS} from "./github-api.mjs";
 import {renderAnalytics,resetAnalytics} from "./analytics-view.mjs";
+import {initTheme} from "./theme.mjs";
 const $=id=>document.getElementById(id);
+initTheme();
 let token="",identity=null,data=null,request=null,expiryTimer=null,session=0;
 let available=[],selected=[],draft=new Set(),discoveryNote="";
 const state={view:"overview"};

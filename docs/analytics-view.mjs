@@ -5,8 +5,24 @@ const TYPES=Object.freeze({commit:"Commit",pull:"Pull request",issue:"Issue upda
 const shortDate=date=>new Intl.DateTimeFormat("en-GB",{day:"2-digit",month:"short",timeZone:"UTC"}).format(new Date(date+"T00:00:00Z"));
 const dateTime=at=>Number.isFinite(Date.parse(at))?new Intl.DateTimeFormat("en-GB",{dateStyle:"medium",timeStyle:"short",timeZone:"UTC"}).format(new Date(at))+" UTC":"—";
 const text=(id,value)=>{$(id).textContent=String(value);};
-const boxIds=["timeline-summary","project-timeline","activity-trend","activity-legend","daily-counts","priority-breakdown","active-projects","focus-next","workflow-signals","timeline-detail-list"];
+const boxIds=["active-spark","events-spark","timeline-summary","project-timeline","activity-trend","activity-legend","daily-counts","priority-breakdown","active-projects","focus-next","workflow-signals","timeline-detail-list"];
 let detail=null;
+function setExpandedCard(id=""){
+  for(const button of document.querySelectorAll("[data-expand]")){
+    const target=$(button.dataset.expand),active=target.id===id;
+    target.classList.toggle("is-expanded",active);
+    button.setAttribute("aria-expanded",String(active));
+    const title=target.querySelector("h2").textContent;
+    button.title=(active?"Collapse ":"Expand ")+title;
+    button.setAttribute("aria-label",button.title);
+  }
+}
+for(const button of document.querySelectorAll("[data-expand]"))button.addEventListener("click",()=>{
+  const target=$(button.dataset.expand),expanded=button.getAttribute("aria-expanded")==="true";
+  setExpandedCard(expanded?"":target.id);
+  if(!expanded)target.scrollIntoView({block:"nearest",behavior:"instant"});
+});
+
 function safeLink(title,href){
   const a=el("a","analysis-link",title||"Untitled");
   try{const u=new URL(href);if(u.protocol==="https:"&&u.hostname==="github.com"&&!u.username&&!u.password){a.href=u.href;a.target="_blank";a.rel="noopener noreferrer";}}catch{}
@@ -54,6 +70,17 @@ function renderTimeline(model){
 }
 const NS="http://www.w3.org/2000/svg";
 function svgNode(tag,attrs={},value){const n=document.createElementNS(NS,tag);for(const [k,v] of Object.entries(attrs))n.setAttribute(k,String(v));if(value!==undefined)n.textContent=String(value);return n;}
+function renderSparkline(id,values,dates,label,partial){
+  const node=$(id);node.replaceChildren();
+  const max=Math.max(1,...values),w=104,h=36;
+  const svg=svgNode("svg",{viewBox:"0 0 "+w+" "+h,role:"img","aria-label":label+" daily observed counts"+(partial?", partial data":"")+": "+values.join(", ")});
+  svg.append(svgNode("title",{},label+" · "+dates.map((date,i)=>date+": "+values[i]).join(" · ")));
+  svg.append(svgNode("line",{x1:3,y1:h-4,x2:w-3,y2:h-4,class:"spark-baseline"}));
+  const points=values.map((v,i)=>[3+(w-6)*i/Math.max(1,values.length-1),h-4-(h-10)*v/max]);
+  svg.append(svgNode("polyline",{points:points.map(p=>p.join(",")).join(" "),class:"spark-path",fill:"none","stroke-linecap":"round","stroke-linejoin":"round"}));
+  if(points.length){const last=points.at(-1);svg.append(svgNode("circle",{cx:last[0],cy:last[1],r:2.4,class:"spark-point"}));}
+  node.append(svg,el("span","spark-caption","Daily sample"+(partial?"*":"")));
+}
 function renderTrend(model){
   const root=$("activity-trend"),legend=$("activity-legend"),daily=$("daily-counts");root.replaceChildren();legend.replaceChildren();daily.replaceChildren();
   const types=model.type==="all"?EVENT_TYPES:[model.type],max=Math.max(1,...model.daily.map(d=>d.total));
@@ -110,7 +137,7 @@ function renderWorkflows(model){
   }
 }
 export function resetAnalytics(){
-  detail=null;
+  detail=null;setExpandedCard();
   for(const id of boxIds)$(id).replaceChildren();
   $("analytics-type").value="all";
   $("timeline-clear").hidden=true;
@@ -130,5 +157,8 @@ export function renderAnalytics(data,{names=[],filter="",days=7,onProject=()=>{}
   if(!model.projects.length){$("analytics-empty").textContent="ยังไม่มี Repository ในขอบเขตที่เลือก · ใช้ Manage repositories";return;}
   text("analytics-active",mark(model.active,model.activityPartial));text("analytics-active-note","of "+model.projects.length+" monitored projects · observed activity");
   text("analytics-total",mark(model.observedTotal,model.activityPartial));text("analytics-focus-total",mark(model.focus.length,model.issuePartial));
+  const all=model.type==="all"?model:analyzeSample(data,{names,filter,days,type:"all"});
+  renderSparkline("active-spark",all.dates.map((_,i)=>all.projects.filter(p=>p.cells[i].events.length>0).length),all.dates,"Active repositories",all.activityPartial);
+  renderSparkline("events-spark",all.daily.map(d=>d.total),all.dates,"Observed events",all.activityPartial);
   renderTimeline(model);renderTrend(model);renderPriority(model);renderProjects(model,onProject);renderFocus(model);renderWorkflows(model);
 }
