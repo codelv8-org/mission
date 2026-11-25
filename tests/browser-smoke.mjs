@@ -64,7 +64,7 @@ try{
  const send=(method,params={})=>new Promise((resolve,reject)=>{const id=++seq;pending.set(id,{resolve,reject});ws.send(JSON.stringify({id,method,params}));});
  const ev=async(expression)=>{const r=await send("Runtime.evaluate",{expression,returnByValue:true,awaitPromise:true});if(r.exceptionDetails)throw Error(r.exceptionDetails.exception?.description||r.exceptionDetails.text);return r.result.value;};
  const viewport=(width,height)=>send("Emulation.setDeviceMetricsOverride",{width,height,deviceScaleFactor:1,mobile:false});
- const shot=async(name)=>{const r=await send("Page.captureScreenshot",{format:"png",captureBeyondViewport:false});await writeFile(join(out,name+".png"),Buffer.from(r.data,"base64"));};
+ const shot=async(name)=>{await delay(220);const r=await send("Page.captureScreenshot",{format:"png",captureBeyondViewport:false});await writeFile(join(out,name+".png"),Buffer.from(r.data,"base64"));};
  const noOverflow=async(label)=>{const v=await ev("({scroll:document.documentElement.scrollWidth,width:innerWidth})");assert.ok(v.scroll<=v.width+1,label+" overflow: "+JSON.stringify(v));};
  await send("Page.enable");await send("Runtime.enable");await send("Emulation.setEmulatedMedia",{features:[{name:"prefers-color-scheme",value:"light"}]});await send("Page.addScriptToEvaluateOnNewDocument",{source:"("+installFixture.toString()+")()"});
  await viewport(1440,1000);await send("Page.navigate",{url});await wait(()=>ev("document.readyState==='complete' && !!document.querySelector('#github-login')"),"login page");await noOverflow("desktop login");await shot("01-login-1440");
