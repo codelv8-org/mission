@@ -66,11 +66,12 @@ try{
  await send("Page.enable");await send("Runtime.enable");await send("Emulation.setEmulatedMedia",{features:[{name:"prefers-color-scheme",value:"light"}]});await send("Page.addScriptToEvaluateOnNewDocument",{source:"("+installFixture.toString()+")()"});
  await viewport(1440,1000);await send("Page.navigate",{url});await wait(()=>ev("document.readyState==='complete' && !!document.querySelector('#github-login')"),"login page");await noOverflow("desktop login");await shot("01-login-1440");
  await ev("document.querySelector('#pat-input').value='github_pat_'+'a'.repeat(40); document.querySelector('#github-login').click()");
- await wait(()=>ev("!document.querySelector('#workspace').hidden && document.querySelector('#m-repos').textContent==='5'"),"fixture login and repository data");
- await ev("document.querySelector('[data-view=dashboard]').click()");
- await wait(()=>ev("!document.querySelector('#analytics-cards').hidden && document.querySelectorAll('#project-timeline tbody tr').length===5"),"analytics");
- const layout=await ev("(()=>{const r=s=>document.querySelector(s).getBoundingClientRect();return {timeline:r('.analysis-timeline').top,trend:r('.analysis-trend').top,lower:['.analysis-priority','.analysis-projects','.analysis-focus','.analysis-workflows'].map(s=>r(s).top)}})()");
- assert.ok(Math.abs(layout.timeline-layout.trend)<2,"timeline and daily chart share a row");assert.ok(layout.lower.every(y=>Math.abs(y-layout.lower[0])<2),"four lower blocks share a row");
+ await wait(()=>ev("!document.querySelector('#workspace').hidden && !document.querySelector('#analytics-cards').hidden && !document.querySelector('#refresh').disabled && document.querySelectorAll('#repo-filter option').length===6"),"fixture login and dashboard data");
+ assert.deepEqual(await ev("[...document.querySelectorAll('[data-view]')].map(b=>b.dataset.view)"),["dashboard","activity","priority","repositories"]);
+ assert.equal(await ev("document.querySelector('[data-view].active').dataset.view"),"dashboard");
+ assert.equal(await ev("document.querySelector('#orbit').hidden && document.querySelector('#activity-matrix').hidden && document.querySelector('#panels').hidden"),true);
+ const layout=await ev("(()=>{const r=s=>document.querySelector(s).getBoundingClientRect();return {trend:r('.analysis-trend').top,trendWidth:r('.analysis-trend').width,bentoWidth:r('.analytics-bento').width,lower:['.analysis-priority','.analysis-projects','.analysis-focus','.analysis-workflows'].map(s=>r(s).top)}})()");
+ assert.ok(Math.abs(layout.trendWidth-layout.bentoWidth)<2,"daily chart fills dashboard row");assert.ok(layout.lower.every(y=>Math.abs(y-layout.lower[0])<2)&&layout.lower[0]>layout.trend,"four lower blocks share a row");
  const material=await ev("(()=>{const s=getComputedStyle(document.querySelector('#analytics-active-card'));const body=getComputedStyle(document.body);return {bg:s.backgroundColor,border:s.borderTopWidth,ink:s.borderTopColor,shadow:s.boxShadow,radius:s.borderTopLeftRadius,image:s.backgroundImage,canvas:body.backgroundColor}})()");
  assert.equal(material.bg,"rgb(255, 255, 255)");assert.equal(material.border,"1px");assert.equal(material.ink,"rgb(226, 229, 236)");assert.equal(material.radius,"14px");assert.equal(material.image,"none");assert.equal(material.canvas,"rgb(244, 245, 248)");
  await noOverflow("1440 dashboard");await shot("02-dashboard-1440");
@@ -80,16 +81,18 @@ try{
  assert.equal(await ev("getComputedStyle(document.querySelector('#analytics-active-card')).backgroundColor"),"rgb(24, 25, 30)");
  assert.equal(await ev("getComputedStyle(document.body).backgroundColor"),"rgb(17, 18, 21)");
  assert.equal(await ev("document.querySelector('#login-theme').value"),"dark");await noOverflow("dark desktop dashboard");await shot("05-dashboard-dark-1440");
+ await ev("document.querySelector('[data-view=activity]').click()");
+ assert.equal(await ev("!document.querySelector('#orbit').hidden && !document.querySelector('#activity-matrix').hidden && !document.querySelector('#activity-panel').hidden && document.querySelector('#analytics').hidden"),true);
+ assert.equal(await ev("document.querySelectorAll('#project-timeline tbody tr').length"),5);
  assert.equal(await ev("document.querySelectorAll('#orbit-grid .orbit-group-row').length"),5);
- assert.equal(await ev("document.querySelectorAll('#orbit-grid .orbit-date').length"),14);
+ assert.equal(await ev("document.querySelectorAll('#orbit-grid .orbit-date').length"),7);
  assert.equal(await ev("document.querySelector('#orbit-grid meter').value"),60);
  await ev("document.querySelector('#orbit-grid .orbit-pill').click()");assert.equal(await ev("document.querySelector('#orbit-detail').hidden"),false);
  await ev("document.querySelector('#orbit-grid .orbit-group-toggle').click()");assert.equal(await ev("document.querySelector('#orbit-grid .orbit-group-toggle').getAttribute('aria-expanded')"),"false");
  await ev("document.querySelector('#orbit-grid .orbit-group-toggle').click()");
  await ev("document.querySelector('#orbit-group').value='type';document.querySelector('#orbit-group').dispatchEvent(new Event('change'))");assert.equal(await ev("document.querySelectorAll('#orbit-grid .orbit-group-row').length"),4);
- await ev("document.querySelector('#orbit-group').value='repo';document.querySelector('#orbit-group').dispatchEvent(new Event('change'));document.querySelector('#orbit-range').value='7';document.querySelector('#orbit-range').dispatchEvent(new Event('change'))");assert.equal(await ev("document.querySelectorAll('#orbit-grid .orbit-date').length"),7);
- await ev("document.querySelector('#orbit-range').value='14';document.querySelector('#orbit-range').dispatchEvent(new Event('change'))");
- const orbitBefore=await ev("document.querySelector('#orbit-window').textContent");await ev("document.querySelector('#orbit-prev').click()");assert.notEqual(await ev("document.querySelector('#orbit-window').textContent"),orbitBefore);await ev("document.querySelector('#orbit-today').click()");assert.equal(await ev("document.querySelector('#orbit-window').textContent"),orbitBefore);
+ await ev("document.querySelector('#orbit-group').value='repo';document.querySelector('#orbit-group').dispatchEvent(new Event('change'))");
+ assert.equal(await ev("document.querySelectorAll('#orbit-range,#orbit-today,#orbit-prev,#orbit-next').length"),0);
  await shot("12-orbit-dark-1440");
  await ev("document.querySelector('[data-expand=timeline-card]').click()");
  assert.equal(await ev("document.querySelector('#timeline-card').classList.contains('is-expanded')"),true);
@@ -102,7 +105,7 @@ try{
  // Export the currently selected repository and day, with the active theme.
  await ev("document.querySelector('#repo-filter').value='demo/mission';document.querySelector('#repo-filter').dispatchEvent(new Event('change'));document.querySelector('#workspace-theme').value='dark';document.querySelector('#workspace-theme').dispatchEvent(new Event('change'));");
  await ev("document.querySelector('#project-timeline button[data-day]').click()");
- const expectedSnapshot=await ev("({active:document.querySelector('#analytics-active').textContent,total:document.querySelector('#analytics-total').textContent,requests:window.fixtureRequests})");
+ const expectedSnapshot=await ev("({commits:document.querySelector('#orbit-kpi-commits').textContent,requests:window.fixtureRequests})");
  await ev("document.querySelector('#timeline-detail-list').append(document.createTextNode('<script>alert(1)</script> github_pat_'+'a'.repeat(40)))");
  const downloadDir=join(dir,"downloads");await mkdir(downloadDir);
  await send("Browser.setDownloadBehavior",{behavior:"allow",downloadPath:downloadDir});
@@ -112,19 +115,20 @@ try{
  assert.equal(await ev("document.querySelector('#snapshot-dialog').open"),false);
  assert.equal((await readdir(downloadDir)).length,0);
  await ev("document.querySelector('#download-html').click();document.querySelector('#confirm-snapshot').click()");
- const savedName=await wait(async()=>(await readdir(downloadDir)).find(n=>/^mission-dashboard-.*\.html$/.test(n)),"HTML snapshot download");
+ const savedName=await wait(async()=>(await readdir(downloadDir)).find(n=>/^mission-activity-.*\.html$/.test(n)),"HTML snapshot download");
  const savedPath=join(downloadDir,savedName),saved=await readFile(savedPath,"utf8");
  assert.match(saved,/<!doctype html>/i);assert.match(saved,/id="orbit-grid"/);assert.match(saved,/orbit-pill/);assert.match(saved,/Fixture milestone mission/);assert.match(saved,/data-theme="dark"/);assert.match(saved,/connect-src 'none'/);assert.match(saved,/&lt;script&gt;alert\(1\)&lt;\/script&gt;/);assert.match(saved,/\[REDACTED\]/);
  assert.ok(!saved.includes("github_pat_"+"a".repeat(40)));assert.ok(!/<script\b|<input\b|<dialog\b|<link\b|<button\b|<select\b/i.test(saved));
- assert.ok(!saved.includes('id="login"')&&!saved.includes('id="activity-panel"')&&!saved.includes('id="account-login"')&&!saved.includes("demo/workspace"));
+ assert.ok(!saved.includes('id="login"')&&!saved.includes('id="analytics"')&&!saved.includes('id="account-login"')&&!saved.includes("demo/workspace"));
  assert.equal(await ev("window.fixtureRequests"),expectedSnapshot.requests);
  assert.equal(await ev("document.querySelector('#snapshot-dialog').open"),false);
- await writeFile(join(out,"08-dashboard-snapshot.html"),saved);
+ await writeFile(join(out,"08-timeline-snapshot.html"),saved);
  await ev("document.querySelector('#repo-filter').value='';document.querySelector('#repo-filter').dispatchEvent(new Event('change'));document.querySelector('#workspace-theme').value='light';document.querySelector('#workspace-theme').dispatchEvent(new Event('change'));");
  await ev("document.querySelector('#timeline-clear').click()");
  assert.equal(await ev("document.querySelector('#timeline-summary').hidden"),true);
  await ev("const p=document.querySelector('#period');p.value='30';p.dispatchEvent(new Event('change'));");
  assert.equal(await ev("document.querySelectorAll('#project-timeline thead .timeline-date').length"),30);
+ assert.equal(await ev("document.querySelectorAll('#orbit-grid thead .orbit-date').length"),30);
  await ev("document.querySelector('#repo-filter').value='demo/mission';document.querySelector('#repo-filter').dispatchEvent(new Event('change'))");
  assert.equal(await ev("document.querySelectorAll('#project-timeline tbody tr').length"),1);
  await ev("document.querySelector('#repo-filter').value='';document.querySelector('#repo-filter').dispatchEvent(new Event('change'));document.querySelector('#period').value='7';document.querySelector('#period').dispatchEvent(new Event('change'));");
@@ -135,6 +139,10 @@ try{
  await ev("document.querySelector('#period').value='month';document.querySelector('#period').dispatchEvent(new Event('change'))");
  await wait(()=>ev("!document.querySelector('#refresh').disabled && !document.querySelector('#download-html').disabled"),"month history loaded");
  assert.equal(await ev("document.querySelectorAll('#project-timeline thead .timeline-date').length"),localMonth.dates.length);
+ assert.equal(await ev("document.querySelectorAll('#orbit-grid .orbit-date').length"),localMonth.dates.length);
+ assert.equal(await ev("[...document.querySelectorAll('#orbit-grid .orbit-month-group')].reduce((n,e)=>n+e.colSpan,0)"),localMonth.dates.length);
+ assert.ok(await ev("document.querySelectorAll('#orbit-grid thead .orbit-weekend').length")>=8);
+ assert.ok(await ev("[...document.querySelectorAll('#orbit-grid .orbit-date .orbit-weekday')].every(e=>['จ.','อ.','พ.','พฤ.','ศ.','ส.','อา.'].includes(e.textContent))"));
  assert.equal(await ev("document.querySelectorAll('#project-timeline .timeline-month-group').length"),2);
  assert.equal(await ev("[...document.querySelectorAll('#project-timeline .timeline-month-group')].reduce((n,e)=>n+e.colSpan,0)"),localMonth.dates.length);
  assert.equal(await ev("document.querySelector('#project-timeline thead .timeline-repo').rowSpan"),2);
@@ -145,17 +153,28 @@ try{
  await ev("document.querySelector('#period').value='year';document.querySelector('#period').dispatchEvent(new Event('change'))");
  await wait(()=>ev("!document.querySelector('#refresh').disabled && !document.querySelector('#download-html').disabled"),"year history loaded");
  assert.equal(await ev("document.querySelectorAll('#project-timeline thead .timeline-date').length"),localYear.dates.length);
+ assert.equal(await ev("document.querySelectorAll('#orbit-grid .orbit-date').length"),localYear.dates.length);
+ assert.equal(await ev("document.querySelectorAll('#orbit-grid .orbit-month-group,#orbit-grid .orbit-weekend').length"),0);
+ assert.ok(await ev("[...document.querySelectorAll('#orbit-grid .orbit-date .orbit-weekday')].every(e=>/^\\d{4}$/.test(e.textContent))"));
  assert.equal(await ev("document.querySelectorAll('#project-timeline .timeline-month-group,#project-timeline .timeline-weekend').length"),0);
- assert.equal(await ev("document.querySelector('#activity-chart-title').textContent"),"Monthly Activity");
+ await ev("document.querySelector('[data-view=dashboard]').click()");assert.equal(await ev("document.querySelector('#activity-chart-title').textContent"),"Monthly Activity");
+ assert.equal(await ev("document.querySelector('#orbit').hidden && document.querySelector('#activity-matrix').hidden"),true);
+ assert.equal(await ev("document.querySelector('#period').value"),"year");
+ await ev("document.querySelector('[data-view=activity]').click()");
  assert.equal(await ev("document.querySelector('#timeline-selected-label').textContent"),"SELECTED MONTH");
  await ev("document.querySelector('#project-timeline button[data-day]').click()");
  assert.equal(await ev("document.querySelector('#timeline-summary').children.length"),4);
  await noOverflow("Last Year timeline");await shot("11-last-year-1440");
  await ev("document.querySelector('#period').value='7';document.querySelector('#period').dispatchEvent(new Event('change'))");
  assert.equal(await ev("document.querySelectorAll('#project-timeline thead .timeline-date').length"),7);
-
+ assert.equal(await ev("document.querySelectorAll('#orbit-grid .orbit-date').length"),7);
+ await ev("document.querySelector('[data-view=dashboard]').click()");
+ const dashboardHTML=await ev("import('./snapshot.mjs').then(m=>m.buildSnapshot({view:'dashboard',scope:'All',period:'Last 7 days',fetchedAt:new Date().toISOString()}))");
+ assert.ok(dashboardHTML.includes('id="analytics"')&&!dashboardHTML.includes('id="orbit-grid"')&&!dashboardHTML.includes('id="project-timeline"')&&!dashboardHTML.includes('id="activity-panel"'));
  for(const [w,h] of [[1024,768],[768,1024],[375,812],[812,375]]){
    await viewport(w,h);await delay(150);await noOverflow(w+"x"+h+" dashboard");assert.equal(await ev("document.querySelector('#analytics').hidden"),false);
+   await ev("document.querySelector('[data-view=activity]').click()");await noOverflow(w+"x"+h+" timeline");assert.equal(await ev("document.querySelectorAll('#orbit-grid .orbit-date').length"),7);
+   await ev("document.querySelector('[data-view=dashboard]').click()");
    if(w===375){await shot("03-dashboard-375");await ev("document.querySelector('#manage-repos').click()");assert.equal(await ev("document.querySelector('#repo-dialog').open"),true);await noOverflow("mobile repository dialog");await shot("04-dialog-375");await ev("document.querySelector('#close-repos').click()");assert.equal(await ev("document.querySelector('#repo-dialog').open"),false);}
  }
  await ev("document.querySelector('#workspace-theme').value='system';document.querySelector('#workspace-theme').dispatchEvent(new Event('change'))");
@@ -173,16 +192,16 @@ try{
  await send("Network.enable");
  await send("Network.emulateNetworkConditions",{offline:true,latency:0,downloadThroughput:0,uploadThroughput:0});
  await viewport(1440,1000);await send("Page.navigate",{url:pathToFileURL(savedPath).href});
- await wait(()=>ev("location.protocol==='file:' && document.readyState==='complete' && !!document.querySelector('#analytics-active')"),"offline HTML snapshot");
- assert.equal(await ev("document.querySelector('#analytics-active').textContent"),expectedSnapshot.active);
- assert.equal(await ev("document.querySelector('#analytics-total').textContent"),expectedSnapshot.total);
+ await wait(()=>ev("location.protocol==='file:' && document.readyState==='complete' && !!document.querySelector('#orbit-grid')"),"offline HTML snapshot");
+ assert.equal(await ev("document.querySelector('#orbit-kpi-commits').textContent"),expectedSnapshot.commits);
+ assert.equal(await ev("!!document.querySelector('#analytics')"),false);
  assert.equal(await ev("document.querySelectorAll('#project-timeline tbody tr').length"),1);
- assert.equal(await ev("document.querySelectorAll('.kpi-spark svg').length"),2);
+ assert.equal(await ev("document.querySelectorAll('.kpi-spark svg').length"),0);
  assert.equal(await ev("document.querySelector('#timeline-summary').children.length"),4);
  assert.equal(await ev("getComputedStyle(document.body).backgroundColor"),"rgb(17, 18, 21)");
  assert.equal(await ev("document.querySelectorAll('script,input,button,select,dialog,link').length"),0);
  assert.equal(await ev("performance.getEntriesByType('resource').filter(r=>/^https?:/.test(r.name)).length"),0);
  await noOverflow("offline snapshot");await shot("09-offline-snapshot-1440");
  assert.deepEqual(errors,[]);
- console.log("Browser smoke passed: login, 5-repo analytics, 1440 bento rows, 7/30-day and repository filters, day drill-down, 1024/768/375/landscape layout, dialog, reduced motion, logout.");
+ console.log("Browser smoke passed: Dashboard-first navigation, isolated Timeline, shared 7/30/month/year periods, repo filters, calendar drill-down, separate exports, responsive layouts, theme, logout.");
 }finally{ws?.close();proc.kill();await new Promise(r=>server.close(r));await delay(200);await rm(dir,{recursive:true,force:true}).catch(()=>{});}

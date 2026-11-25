@@ -1,7 +1,6 @@
 // Orbit timeline: observed lifetimes, explicit milestone due dates and point events.
 // No estimated task progress or dates; all calendar geometry uses Asia/Bangkok.
-import {calendarDay} from "./period.mjs";
-const DAY=86400000;
+import {calendarDay,periodRange,bucketKey,monthGroups} from "./period.mjs";
 const clean=(v,n=300)=>typeof v==="string"?v.slice(0,n):"";
 const date=v=>typeof v==="string"&&Number.isFinite(Date.parse(v))?new Date(v).toISOString():null;
 export const ORBIT_TYPES=Object.freeze(["milestone","issue","pull","commit"]);
@@ -50,21 +49,21 @@ export function normalizeOrbit(repo,{commits=[],issueList=[],openIssues=[],pulls
  }
  return [...items.values()];
 }
-export function orbitWindow(asOf,days=14,offset=0){
- const d=[7,14,28].includes(Number(days))?Number(days):14;
- const ms=Number.isFinite(asOf)?asOf:Date.now();
- const today=calendarDay(ms),todayMs=Date.parse(today+"T00:00:00Z");
- const end=todayMs+(2+Math.max(-3660,Math.min(3660,Math.trunc(offset)||0)))*DAY;
- const start=end-(d-1)*DAY;
- const dates=Array.from({length:d},(_,i)=>new Date(start+i*DAY).toISOString().slice(0,10));
- return {dates,today,startDate:dates[0],endDate:dates.at(-1),days:d};
+export function orbitWindow(asOf,period="7"){
+ const range=periodRange(period,Number.isFinite(asOf)?asOf:Date.now());
+ return {...range,today:bucketKey(range.asOf,range.unit),columns:range.dates.length,monthGroups:range.unit==="day"?monthGroups(range.dates):[]};
 }
 export function clipOrbit(item,window,asOf){
  if(!date(item.startAt))return null;
- const start=calendarDay(Date.parse(item.startAt)),end=calendarDay(item.endAt&&date(item.endAt)?Date.parse(item.endAt):asOf);
- if(end<start||end<window.startDate||start>window.endDate)return null;
- const first=Math.max(0,Math.round((Date.parse(start)-Date.parse(window.startDate))/DAY));
- const last=Math.min(window.days-1,Math.round((Date.parse(end)-Date.parse(window.startDate))/DAY));
+ const endAt=item.endAt&&date(item.endAt)?Date.parse(item.endAt):asOf;
+ const startAt=Date.parse(item.startAt);
+ if(endAt<startAt)return null;
+ const start=calendarDay(startAt),end=calendarDay(endAt);
+ if(end<window.startDate||start>window.endDate)return null;
+ const firstDate=bucketKey(startAt,window.unit),lastDate=bucketKey(endAt,window.unit);
+ const first=firstDate<window.dates[0]?0:window.dates.indexOf(firstDate);
+ const last=lastDate>window.dates.at(-1)?window.columns-1:window.dates.indexOf(lastDate);
+ if(first<0||last<first)return null;
  return {first,last,span:last-first+1,before:start<window.startDate,after:end>window.endDate};
 }
 export function orbitGroups(items,window,asOf,{filter="",type="all",status="all",query="",group="repo"}={}){

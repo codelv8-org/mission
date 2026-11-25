@@ -13,7 +13,7 @@ export function redact(value,secret=""){
   return s.replace(/\b(?:github_pat_|gh[pousr]_)[a-zA-Z0-9_]{16,}/g,"[REDACTED]");
 }
 export function snapshotFilename(view,now=new Date()){
-  const safe=["overview","dashboard","activity","priority","repositories"].includes(view)?view:"workspace";
+  const safe=["dashboard","activity","priority","repositories"].includes(view)?view:"workspace";
   return "mission-"+safe+"-"+now.toISOString().replace(/[:.]/g,"-")+".html";
 }
 function styleText(source){
