@@ -1,6 +1,7 @@
 // Browser-only, read-only API. No credentials are persisted or sent to another origin.
 import {historyRequest} from "./period.mjs";
 import {normalizeOrbit} from "./orbit-model.mjs";
+import {normalizePerformance,normalizeLanguages,normalizeRoot} from "./intelligence-model.mjs";
 const API="https://api.github.com";
 export const MAX_HISTORY_PAGES=5;
 export const MAX_REPOS=20;
@@ -72,16 +73,22 @@ export function createGitHubClient(token,{fetcher=fetch,signal}={}){
     }
     return {records,truncated};
   }
+  async function profile(path,normalize){
+    const {body}=await get(path),normalized=normalize(body);
+    if(normalized===null)throw new GitHubError(502,"invalid_technology_metadata");
+    return {body:normalized};
+  }
   async function readRepo(name,since,pages){
     const base="/repos/"+name.split("/").map(encodeURIComponent).join("/");
-    const long=pages>1,sections=["repository","commits","issue_activity","pulls","workflows","issues","milestones"];
+    const long=pages>1,sections=["repository","commits","issue_activity","pulls","workflows","issues","milestones","languages","root_metadata"];
     const tasks=[get(base),
       getPages(base+"/commits?since="+encodeURIComponent(since),long?100:10,pages,"commits",since),
       getPages(base+"/issues?state=all&sort=updated&direction=desc&since="+encodeURIComponent(since),long?100:30,pages,"issue_activity",since),
       getPages(base+"/pulls?state=all&sort=updated&direction=desc",long?100:10,pages,"pulls",since),
       getPages(base+"/actions/runs",long?100:5,pages,"workflows",since),
       getPages(base+"/issues?state=open&sort=updated&direction=desc",100,1,"issues",since),
-      getPages(base+"/milestones?state=all&sort=due_on&direction=asc",100,1,"milestones",since)];
+      getPages(base+"/milestones?state=all&sort=due_on&direction=asc",100,1,"milestones",since),
+      profile(base+"/languages",normalizeLanguages),profile(base+"/contents",normalizeRoot)];
     const results=await Promise.allSettled(tasks);
     signal?.throwIfAborted();
     const fatal=results.find(r=>r.status==="rejected"&&(r.reason?.status===401||r.reason?.kind==="rate_limited"));
@@ -89,13 +96,13 @@ export function createGitHubClient(token,{fetcher=fetch,signal}={}){
     const errors=[],truncated=[],activity=[],issues=[];
     const values=results.map((r,i)=>{
       if(r.status==="fulfilled"){
-        if(i===0)return r.value.body;
+        if(i===0||i>=7){if(i===8&&r.value.body.capped)truncated.push({repo:name,section:sections[i]});return r.value.body;}
         if(r.value.truncated)truncated.push({repo:name,section:sections[i]});
         return r.value.records;
       }
       errors.push({repo:name,section:sections[i],status:r.reason?.status||"unavailable"});return null;
     });
-    const [r,commits,issueList,pulls,runs,openIssues,milestones]=values;
+    const [r,commits,issueList,pulls,runs,openIssues,milestones,languages,root]=values;
     const repo=r&&validRepo(r.full_name)?{...repository(r),name}:null;
     const event=(type,title,url,at,status="")=>({repo:name,type,title:clean(title),url,at,status:clean(status)});
     for(const c of commits||[])activity.push(event("commit",c.commit?.message?.split("\n")[0],c.html_url,c.commit?.committer?.date));
@@ -103,21 +110,21 @@ export function createGitHubClient(token,{fetcher=fetch,signal}={}){
     for(const i of openIssues||[]){if(!i.pull_request)issues.push({repo:name,number:i.number,title:clean(i.title),url:i.html_url,updatedAt:i.updated_at,...priority(i.labels)});}
     for(const p of pulls||[])activity.push(event("pull",p.title,p.html_url,p.updated_at,p.merged_at?"merged":p.state));
     for(const w of runs||[])activity.push(event("workflow",w.name,w.html_url,w.updated_at,w.conclusion||w.status));
-    return {repository:repo,activity:activity.filter(e=>Date.parse(e.at)>=Date.parse(since)),issues,errors,truncated,timelineItems:normalizeOrbit(name,{commits,issueList,pulls,openIssues,milestones})};
+    return {repository:repo,activity:activity.filter(e=>Date.parse(e.at)>=Date.parse(since)),issues,errors,truncated,timelineItems:normalizeOrbit(name,{commits,issueList,pulls,openIssues,milestones}),performance:normalizePerformance(name,{commits,issueList,pulls,runs}),techProfile:{repo:name,languages,root}};
   }
   async function dashboard(names,expectedUser,{period="7"}={}){
     if(!Array.isArray(names)||names.length>MAX_REPOS||names.some(n=>!validRepo(n))||new Set(names.map(n=>n.toLowerCase())).size!==names.length)throw new GitHubError(400,"invalid_selection");
     const identity=await user();
     if(expectedUser&&identity.id!==expectedUser.id)throw new GitHubError(401,"identity_changed");
-    const {since,pages}=historyRequest(period),repositories=[],activity=[],issues=[],errors=[],truncated=[],timelineItems=[];
+    const {since,pages}=historyRequest(period),repositories=[],activity=[],issues=[],errors=[],truncated=[],timelineItems=[],performance=[],techProfiles=[];
     for(const name of names){
       signal?.throwIfAborted();
       const r=await readRepo(name,since,Math.min(MAX_HISTORY_PAGES,pages));
       if(r.repository)repositories.push(r.repository);
-      activity.push(...r.activity);issues.push(...r.issues);errors.push(...r.errors);truncated.push(...r.truncated);timelineItems.push(...r.timelineItems);
+      activity.push(...r.activity);issues.push(...r.issues);errors.push(...r.errors);truncated.push(...r.truncated);timelineItems.push(...r.timelineItems);performance.push(...r.performance);techProfiles.push(r.techProfile);
     }
     activity.sort((a,b)=>(Date.parse(b.at)||0)-(Date.parse(a.at)||0));
-    return {user:identity,fetchedAt:new Date().toISOString(),historySince:since,historyPages:pages,repositories,activity,issues,errors,truncated,timelineItems};
+    return {user:identity,fetchedAt:new Date().toISOString(),historySince:since,historyPages:pages,repositories,activity,issues,errors,truncated,timelineItems,performance,techProfiles};
   }
   return Object.freeze({user,discover,findRepo,dashboard});
 }

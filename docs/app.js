@@ -2,6 +2,7 @@ import {createGitHubClient,isFineGrainedPAT,validRepo,MAX_REPOS} from "./github-
 import {renderAnalytics,renderActivityMatrix,resetAnalytics} from "./analytics-view.mjs";
 import {initOrbit,renderOrbit,resetOrbit,orbitScope} from "./orbit-view.mjs";
 import {initTheme} from "./theme.mjs";
+import {renderIntelligence,resetIntelligence} from "./intelligence-view.mjs";
 import {downloadSnapshot} from "./snapshot.mjs";
 import {historyRequest,periodRange,CALENDAR_ZONE} from "./period.mjs";
 const $=id=>document.getElementById(id);
@@ -44,7 +45,7 @@ function clearSession(msg="ออกจากระบบแล้ว"){
   ["activity-list","priority-list","repo-list","repo-options"].forEach(id=>$(id).replaceChildren());
   $("account-login").textContent="";$("updated").textContent="";$("repo-filter").replaceChildren(new Option("All repositories",""));
   $("repo-count").textContent="";$("repo-dialog-note").textContent="เลือกได้สูงสุด "+MAX_REPOS+" Repository ต่อการเชื่อมต่อ";$("repo-search").value="";$("repo-manual").value="";$("repo-selection-message").textContent="";$("pat-input").value="";
-  resetOrbit();resetAnalytics();switchView("dashboard");
+  resetIntelligence();resetOrbit();resetAnalytics();switchView("dashboard");
   notice("");$("workspace").hidden=true;$("login").hidden=false;$("refresh").disabled=false;$("github-login").disabled=false;$("add-repo").disabled=false;
   message(msg);
 }
@@ -173,7 +174,9 @@ function renderTimelinePage(){
   renderProjectTimeline();
   renderActivityMatrix(data,{names:selected,filter:$("repo-filter").value,period:$("period").value});
 }
+function renderAnalyze(){renderIntelligence(data,{names:selected,filter:$("repo-filter").value,period:$("period").value});}
 function render(){
+  if(state.view==="analyze")renderAnalyze();
   if(state.view==="activity")renderTimelinePage();
   if(state.view==="dashboard")renderDashboard();
   if(!data)return;
@@ -192,18 +195,20 @@ function render(){
   if(!repos.length)empty(rl,"ไม่พบ Repository ที่โหลดสำเร็จ");
 }
 function switchView(view){
-  const names={dashboard:"Dashboard",activity:"Timeline",priority:"Priority",repositories:"Repositories"};
+  const names={dashboard:"Dashboard",activity:"Timeline",analyze:"Analyze",priority:"Priority",repositories:"Repositories"};
   if(!Object.hasOwn(names,view))view="dashboard";
   state.view=view;
-  $("view-title").textContent=names[view];$("headline").textContent=view==="dashboard"?"Project Analytics Dashboard":names[view];
-  $("view-description").textContent=view==="dashboard"?"วิเคราะห์กิจกรรมและสัญญาณของโปรเจกต์จากข้อมูล GitHub ที่โหลดได้":view==="activity"?"ติดตามช่วงเวลาดำเนินงานและกิจกรรมจาก GitHub โดยใช้ Period กลาง":"ติดตามโปรเจกต์จากข้อมูลจริงบน GitHub";
+  $("view-title").textContent=names[view];$("headline").textContent=view==="dashboard"?"Project Analytics Dashboard":view==="analyze"?"Developer Intelligence":names[view];
+  $("view-description").textContent=view==="dashboard"?"วิเคราะห์กิจกรรมและสัญญาณของโปรเจกต์จากข้อมูล GitHub ที่โหลดได้":view==="activity"?"ติดตามช่วงเวลาดำเนินงานและกิจกรรมจาก GitHub โดยใช้ Period กลาง":view==="analyze"?"วิเคราะห์การส่งมอบงาน เทคโนโลยี และหลักฐานการพัฒนาใน Repository":"ติดตามโปรเจกต์จากข้อมูลจริงบน GitHub";
   $("analytics").hidden=view!=="dashboard";
+  $("intelligence").hidden=view!=="analyze";
   $("orbit").hidden=view!=="activity";
   $("activity-matrix").hidden=view!=="activity";
-  $("panels").hidden=view==="dashboard";
+  $("panels").hidden=view==="dashboard"||view==="analyze";
   ["activity","priority","repositories"].forEach(v=>$(v+"-panel").hidden=view!==v);
   $("panels").classList.add("single");
   if(view==="dashboard")renderDashboard();
+  if(view==="analyze")renderAnalyze();
   if(view==="activity")renderTimelinePage();
   document.querySelectorAll("[data-view]").forEach(b=>{const on=b.dataset.view===view;b.classList.toggle("active",on);if(on)b.setAttribute("aria-current","page");else b.removeAttribute("aria-current");});
 }
@@ -227,7 +232,7 @@ $("apply-repos").addEventListener("click",()=>{
   if(!draft.size||draft.size>MAX_REPOS)return;
   selected=available.filter(r=>draft.has(r.name.toLowerCase())).map(r=>r.name);
   $("repo-dialog").close();
-  data=null;resetAnalytics();resetOrbit();updateExport();["activity-list","priority-list","repo-list"].forEach(id=>$(id).replaceChildren());
+  data=null;resetAnalytics();resetOrbit();resetIntelligence();updateExport();["activity-list","priority-list","repo-list"].forEach(id=>$(id).replaceChildren());
   $("repo-filter").replaceChildren(new Option("All repositories",""));$("updated").textContent="";
   load();
 });
