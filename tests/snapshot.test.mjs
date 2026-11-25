@@ -7,6 +7,7 @@ test("snapshot filename and token redaction",()=>{
  assert.equal(redact("prefix "+pat+" "+classic,pat),"prefix [REDACTED] [REDACTED]");
  assert.equal(redact("repo/mission <script> text"),"repo/mission <script> text");
  assert.equal(snapshotFilename("dashboard",new Date("2026-11-25T00:00:00Z")),"mission-dashboard-2026-11-25T00-00-00-000Z.html");
+ assert.equal(snapshotFilename("performance",new Date("2026-11-25T00:00:00Z")),"mission-performance-2026-11-25T00-00-00-000Z.html");
  assert.match(snapshotFilename("../unsafe",new Date(0)),/^mission-workspace-/);
  for(const directive of ["default-src 'none'","script-src 'none'","connect-src 'none'","form-action 'none'","img-src 'none'"])assert.ok(SNAPSHOT_CSP.includes(directive));
 });

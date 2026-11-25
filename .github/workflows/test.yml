@@ -18,6 +18,10 @@ jobs:
           node-version: '22'
       - run: npm test
       - run: node --check docs/app.js && node --check docs/github-api.mjs && node --check docs/analytics.mjs && node --check docs/analytics-view.mjs && node --check docs/theme.mjs && node --check docs/snapshot.mjs && node --check docs/period.mjs && node --check docs/intelligence-model.mjs && node --check docs/intelligence-view.mjs && node --check docs/contribution-model.mjs && node --check docs/insight-model.mjs
+      - name: Install Thai-capable fonts for browser QA
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends fonts-noto-core
       - name: Browser responsive smoke (synthetic GitHub fixture)
         run: node tests/browser-smoke.mjs
       - name: Upload browser QA screenshots

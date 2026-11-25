@@ -157,7 +157,7 @@ function drawComparison(data,m,opts,result=compareIntelligence(data,m,opts)){
  }));
 }
 
-const dynamicIds=["intel-trend","intel-trend-table","intel-heat","intel-wip","intel-repos","intel-radar","intel-domains","intel-languages","intel-stack","intel-quality","intel-agents","intel-contributors","intel-evidence","intel-compare","intel-insight-summary","intel-insight-list","intel-practice-review"];
+const dynamicIds=["intel-trend","intel-trend-table","intel-heat","intel-wip","intel-repos","intel-radar","intel-domains","intel-languages","intel-stack","intel-quality","intel-agents","intel-contributors","intel-evidence","intel-compare","intel-insight-summary","intel-insight-list","intel-practice-review","performance-quality"];
 const kpis=["merged","closed","commits","cycle","rate","days"];
 function clearIntelligence(resetFilters){
  contributionContext=null;insightContext=null;insightLimit=8;
@@ -170,15 +170,12 @@ function clearIntelligence(resetFilters){
  for(const id of ["intel-root-note","intel-language-note"])text(id,"");
  text("intel-period","Shared Period · ICT");text("intel-coverage","เชื่อมต่อ GitHub เพื่อเริ่มวิเคราะห์");
  $("intel-cards").hidden=true;$("intel-empty").hidden=false;
+ text("performance-period","Shared Period · ICT");text("performance-coverage","เชื่อมต่อ GitHub เพื่อเริ่มวิเคราะห์");
+ $("performance-cards").hidden=true;$("performance-empty").hidden=false;
 }
 export function resetIntelligence(){clearIntelligence(true);}
-export function renderIntelligence(data,opts={}){
- clearIntelligence(false);if(!data)return;
- const m=analyzeIntelligence(data,opts);
- if(!m.scope.length)return;
- $("intel-empty").hidden=true;$("intel-cards").hidden=false;
- text("intel-period",m.range.startDate+" – "+m.range.endDate+" · ICT · "+(opts.filter||"All selected repositories"));
- text("intel-coverage",m.scope.length+" repositories · "+m.errors.length+" unavailable sections · "+m.caps.length+" capped sections"+(m.historyGap?" · History incomplete":"")+" · Skill evidence is a current snapshot");
+// Each page owns its own DOM. Both consume the same normalized data and shared scope.
+function drawPerformanceCards(m){
  function kpi(key,v,cov,note,suffix=""){text("intel-"+key,value(v,cov,suffix));text("intel-"+key+"-note",note+" · "+coverage(cov));}
  kpi("merged",m.merged,m.cov.pulls,"Actual merge timestamp");kpi("closed",m.closed,m.cov.issues,"state_reason = completed");kpi("commits",m.commits,m.cov.commits,"Default branch");
  kpi("cycle",m.cycleHours,m.cov.pulls,m.cycleN+"/"+m.merged+" merged PRs with valid timestamps"," h");
@@ -188,20 +185,42 @@ export function renderIntelligence(data,opts={}){
  for(const [label,v,cov] of [["Open issues",m.openIssues,m.cov.openIssues],["Blocked issues",m.blocked,m.cov.openIssues],["Open PRs",m.openPRs,m.cov.openPulls]]){const row=n("div","intel-queue-row");row.append(n("span","",label),n("strong","",value(v,cov)));$("intel-wip").append(row);}
  const mark=(v,p)=>v===null?"—":num(v)+(p?"*":"");
  table($("intel-repos"),["Repository","Commits","Merged PRs","Completed issues","Workflow success"],m.repos.map(r=>[repoLink(r.repo),mark(r.commits,r.partial.commits),mark(r.merged,r.partial.merged),mark(r.closed,r.partial.closed),r.runs?num(100*r.success/r.runs)+"% ("+r.success+"/"+r.runs+")"+(r.partial.runs?"*":""):"—"]));
+}
+function drawAnalyzeCards(data,m,comparison){
  text("intel-root-note",m.rootLoaded+"/"+m.scope.length+" root scans · "+m.rootCapped+" capped");
  drawRadar(m);drawLanguages(m);
  table($("intel-stack"),["Repository","Languages (top 5 by bytes)","Manifest names","Root evidence"],m.repos.map(r=>[repoLink(r.repo),r.languages===null?"Unavailable":r.languages.slice(0,5).map(x=>x.name).join(", ")||"No language bytes",r.root?r.root.manifests.join(", ")||"No matching marker":"Unavailable",r.root?r.root.domains.filter(d=>d.markers.length).map(d=>d.key+": "+d.markers.join(", ")).join(" · ")||"No matching marker":"Unavailable"]));
- const comparison=compareIntelligence(data,m,opts);
  drawInsights(data,m,comparison);
- contributionContext=m;drawContributions(m);drawComparison(data,m,opts,comparison);
- const quality=$("intel-quality");
- table(quality,["Source","Loaded / selected","Meaning"],[
-  ["Commits",coverage(m.cov.commits),"Committer dates; default branch only; actor from linked GitHub author"],
+ contributionContext=m;drawContributions(m);
+}
+function drawQuality(m,mode){
+ const performance=mode==="performance",quality=$(performance?"performance-quality":"intel-quality");
+ const rows=[
+  ["Commits",coverage(m.cov.commits),"Committer dates; default branch only"+(performance?"":"; actor from linked GitHub author")],
   ["Pull requests",coverage(m.cov.pulls),"Merged by actual merged_at; median created_at → merged_at"],
   ["Issues",coverage(m.cov.issues),"Closed with explicit completed reason and closed_at"],
   ["Workflows",coverage(m.cov.workflows),"Latest observed terminal run records by updated_at; success / all known completed conclusions"],
-  ["Languages",m.langLoaded+"/"+m.scope.length+" repos","Current GitHub language bytes, not time-based usage"],
-  ["Root metadata",m.rootLoaded+"/"+m.scope.length+" repos"+(m.rootCapped?" · capped":""),"Exact root markers; no file contents or proficiency inference"]
- ]);
- if(m.errors.length||m.caps.length){const d=n("details","intel-quality-detail");d.append(n("summary","","Unavailable / capped sources"));for(const e of m.errors)d.append(n("p","muted",e.repo+" · "+e.section+" · "+e.status));for(const e of m.caps)d.append(n("p","muted",e.repo+" · "+e.section+" · sample limit"));quality.append(d);}
+  ["Open issues",coverage(m.cov.openIssues),"Current open-issue snapshot; labels determine priority/blocker"],
+  ["Open PRs",coverage(m.cov.openPulls),"Current sampled open PRs; not a historical queue count"]
+ ];
+ if(!performance)rows.push(["Languages",m.langLoaded+"/"+m.scope.length+" repos","Current GitHub language bytes, not time-based usage"],["Root metadata",m.rootLoaded+"/"+m.scope.length+" repos"+(m.rootCapped?" · capped":""),"Exact root markers; no file contents or proficiency inference"]);
+ table(quality,["Source","Loaded / selected","Meaning"],rows);
+ const relevant=e=>!performance||["repository","commits","pulls","issue_activity","issues","workflows"].includes(e.section);
+ const errors=m.errors.filter(relevant),caps=m.caps.filter(relevant);
+ if(errors.length||caps.length){const d=n("details","intel-quality-detail");d.append(n("summary","","Unavailable / capped sources"));for(const e of errors)d.append(n("p","muted",e.repo+" · "+e.section+" · "+e.status));for(const e of caps)d.append(n("p","muted",e.repo+" · "+e.section+" · sample limit"));quality.append(d);}
+ return {errors:errors.length,caps:caps.length};
 }
+function renderIntelligencePage(data,opts,mode){
+ clearIntelligence(false);if(!data)return;
+ const m=analyzeIntelligence(data,opts);if(!m.scope.length)return;
+ const performance=mode==="performance",prefix=performance?"performance":"intel";
+ $(prefix+"-empty").hidden=true;$(prefix+"-cards").hidden=false;
+ text(prefix+"-period",m.range.startDate+" – "+m.range.endDate+" · ICT · "+(opts.filter||"All selected repositories"));
+ const comparison=compareIntelligence(data,m,opts);
+ if(performance){drawPerformanceCards(m);drawComparison(data,m,opts,comparison);}
+ else drawAnalyzeCards(data,m,comparison);
+ const quality=drawQuality(m,mode);
+ text(prefix+"-coverage",m.scope.length+" repositories · "+quality.errors+" unavailable sections · "+quality.caps+" capped sections"+(m.historyGap?" · History incomplete":"")+(performance?" · Open queue is a current snapshot":" · Skill evidence is a current snapshot"));
+}
+export function renderIntelligence(data,opts={}){renderIntelligencePage(data,opts,"analyze");}
+export function renderPerformance(data,opts={}){renderIntelligencePage(data,opts,"performance");}

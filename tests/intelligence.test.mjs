@@ -28,7 +28,23 @@ test("period/repository scope, median and honest missing-data coverage",()=>{
 test("Analyze UI is isolated, uses shared period, no unsafe rendering or extra origins",async()=>{
  const read=p=>readFile(new URL("../"+p,import.meta.url),"utf8");
  const [h,a,v,c,s]=await Promise.all(["docs/index.html","docs/app.js","docs/intelligence-view.mjs","docs/intelligence.css","docs/snapshot.mjs"].map(read));
- assert.match(h,/data-view="analyze"/);assert.match(a,/\$\("intelligence"\).hidden=view!=="analyze"/);assert.match(a,/renderIntelligence\(data,\{names:selected,filter:\$\("repo-filter"\).value,period:\$\("period"\).value\}/);
+ assert.match(h,/data-view="analyze"/);assert.match(h,/data-view="performance"/);assert.match(a,/\$\("performance"\).hidden=view!=="performance"/);assert.match(a,/\$\("intelligence"\).hidden=view!=="analyze"/);assert.match(a,/renderIntelligence\(data,\{names:selected,filter:\$\("repo-filter"\).value,period:\$\("period"\).value\}/);
  for(const [,id] of v.matchAll(/\$\("([^"]+)"\)/g))assert.ok(h.includes('id="'+id+'"'),id);
  assert.ok(!/innerHTML|insertAdjacentHTML|localStorage|sessionStorage|\bfetch\(/.test(v));assert.ok(!/@import|url\s*\(/i.test(c));assert.match(s,/"intelligence.css"/);assert.match(s,/"analyze"/);
+});
+
+test("Analyze and Performance own distinct DOM, share filters, and preserve data-model calculations",async()=>{
+ const read=p=>readFile(new URL("../"+p,import.meta.url),"utf8");
+ const [h,a,v,s]=await Promise.all(["docs/index.html","docs/app.js","docs/intelligence-view.mjs","docs/snapshot.mjs"].map(read));
+ const analysis=h.slice(h.indexOf('<section id="intelligence"'),h.indexOf('<section id="performance"'));
+ const performance=h.slice(h.indexOf('<section id="performance"'),h.indexOf('<footer>MISSION'));
+ assert.ok(analysis.includes('id="intel-stack"')&&analysis.includes('id="intel-agents"')&&analysis.includes('id="intel-insight-list"'));
+ assert.ok(!analysis.includes('id="intel-merged"')&&!analysis.includes('id="intel-compare"'));
+ assert.ok(performance.includes('id="intel-merged"')&&performance.includes('id="intel-compare"')&&performance.includes('id="performance-quality"'));
+ assert.ok(!performance.includes('id="intel-stack"')&&!performance.includes('id="intel-agents"')&&!performance.includes('id="intel-insight-list"'));
+ const ids=[...h.matchAll(/\bid="([^"]+)"/g)].map(m=>m[1]);assert.equal(ids.length,new Set(ids).size);
+ assert.match(a,/renderPerformance\(data,\{names:selected,filter:\$\("repo-filter"\).value,period:\$\("period"\).value\}/);
+ assert.match(a,/if\(view==="performance"\)renderPerformancePage\(\)/);
+ assert.match(v,/if\(performance\)\{drawPerformanceCards\(m\);drawComparison\(data,m,opts,comparison\);\}/);
+ assert.match(s,/"performance"/);
 });
