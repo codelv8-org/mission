@@ -64,3 +64,16 @@
 @media(max-width:760px){.intel-bento{gap:10px;}.intel-half{grid-column:1/-1;}.intel-intro{padding:14px;}.intel-kpi{padding:12px;gap:8px;}.intel-kpi-icon{width:28px;height:28px;}.intel-heat-grid{grid-template-columns:repeat(auto-fill,minmax(48px,1fr));}}
 @media(max-width:360px){.intel-kpi{grid-column:1/-1;}}
 @media(forced-colors:active){.intel-heat-cell,.intel-meter{border:1px solid CanvasText;}.intel-radar-area{fill:none;stroke:Highlight;}.intel-bar-pr,.intel-bar-issue{fill:CanvasText;}}
+
+/* Contribution and comparison cards: local controls are omitted from static export. */
+.intel-local-controls{display:flex;align-items:center;flex-wrap:wrap;gap:7px;font-size:12px;min-width:0;}
+.intel-local-controls label{color:var(--muted);font-size:11px;}
+.intel-local-controls select{min-width:0;max-width:190px;min-height:36px;}
+.intel-contribution-kpis{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;margin-top:12px;}
+.intel-contribution-kpis>div{background:var(--paper);border:1px solid var(--line);border-radius:10px;padding:12px;min-width:0;}
+.intel-contribution-kpis small{font-size:11px;color:var(--muted);display:block;overflow-wrap:anywhere;}
+.intel-contribution-kpis strong{display:block;color:var(--deep);font-size:27px;line-height:1.4;font-variant-numeric:tabular-nums;overflow-wrap:anywhere;}
+#intel-compare,#intel-evidence,#intel-contributors{margin-top:10px;}
+#intel-contributors .intel-table{min-width:420px;}
+@media(max-width:760px){.intel-local-controls{width:100%;}.intel-local-controls select{min-height:44px;max-width:100%;}.intel-contribution-kpis{grid-template-columns:repeat(2,minmax(0,1fr));}.intel-contribution-kpis>div{padding:9px;}}
+@media(max-width:360px){.intel-contribution-kpis{grid-template-columns:1fr;}}

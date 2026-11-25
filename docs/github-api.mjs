@@ -112,11 +112,11 @@ export function createGitHubClient(token,{fetcher=fetch,signal}={}){
     for(const w of runs||[])activity.push(event("workflow",w.name,w.html_url,w.updated_at,w.conclusion||w.status));
     return {repository:repo,activity:activity.filter(e=>Date.parse(e.at)>=Date.parse(since)),issues,errors,truncated,timelineItems:normalizeOrbit(name,{commits,issueList,pulls,openIssues,milestones}),performance:normalizePerformance(name,{commits,issueList,pulls,runs}),techProfile:{repo:name,languages,root}};
   }
-  async function dashboard(names,expectedUser,{period="7"}={}){
+  async function dashboard(names,expectedUser,{period="7",compare=false}={}){
     if(!Array.isArray(names)||names.length>MAX_REPOS||names.some(n=>!validRepo(n))||new Set(names.map(n=>n.toLowerCase())).size!==names.length)throw new GitHubError(400,"invalid_selection");
     const identity=await user();
     if(expectedUser&&identity.id!==expectedUser.id)throw new GitHubError(401,"identity_changed");
-    const {since,pages}=historyRequest(period),repositories=[],activity=[],issues=[],errors=[],truncated=[],timelineItems=[],performance=[],techProfiles=[];
+    const {since,pages}=historyRequest(period,Date.now(),{compare}),repositories=[],activity=[],issues=[],errors=[],truncated=[],timelineItems=[],performance=[],techProfiles=[];
     for(const name of names){
       signal?.throwIfAborted();
       const r=await readRepo(name,since,Math.min(MAX_HISTORY_PAGES,pages));

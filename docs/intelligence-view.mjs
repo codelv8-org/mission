@@ -1,4 +1,5 @@
-import {analyzeIntelligence} from "./intelligence-model.mjs";
+import {analyzeIntelligence,compareIntelligence} from "./intelligence-model.mjs";
+import {analyzeContributions} from "./contribution-model.mjs";
 const $=id=>document.getElementById(id);
 const n=(tag,cls,txt)=>{const e=document.createElement(tag);if(cls)e.className=cls;if(txt!==undefined)e.textContent=String(txt);return e;};
 const text=(id,v)=>{$(id).textContent=v;};
@@ -65,17 +66,74 @@ function drawLanguages(m){
   const row=n("div","intel-lang-row"),label=n("div","intel-bar-label");label.append(n("strong","",d.name),n("small","",num(d.share)+"% · "+num(d.bytes/1024)+" KiB"));row.append(label,meter(d.bytes,m.totalBytes,"intel-language-meter tone-"+i%4,d.name+": "+num(d.share)+"%"));root.append(row);
  }
 }
-const dynamicIds=["intel-trend","intel-trend-table","intel-heat","intel-wip","intel-repos","intel-radar","intel-domains","intel-languages","intel-stack","intel-quality"];
+
+let contributionContext=null;
+function sourceLink(row){
+ if(!row.source)return "—";
+ const a=n("a","intel-repo-link",row.kind==="commit"?"Commit ↗":"PR ↗");
+ // source was already restricted to this repository and record type by normalization.
+ a.href=row.source;a.target="_blank";a.rel="noopener noreferrer";return a;
+}
+function drawContributions(m){
+ const kind=$("intel-contribution-kind").value,select=$("intel-contributor");
+ const result=analyzeContributions(m.contributions,{kind,actor:select.value});
+ select.replaceChildren(new Option("All contributors","all"),...result.contributors.map(c=>new Option(c.label,c.key)));
+ select.value=result.actor;
+ const cov=result.kind==="commit"?m.cov.commits:m.cov.pulls,scopeLabel=result.kind==="commit"?"Default branch commits":"Merged PRs";
+ text("intel-contribution-scope",scopeLabel+" · "+(result.actor==="all"?"All contributors":result.contributors.find(c=>c.key===result.actor)?.label||"All contributors")+" · "+coverage(cov));
+ text("intel-contrib-total",value(result.total,cov));text("intel-contrib-declared",value(result.declared,cov));text("intel-contrib-actors",value(result.contributors.filter(c=>c.key!=="unlinked").length,cov));
+ text("intel-contrib-note","Linked accounts refer to all contributors for this activity type in the selected repository/period. Explicit declarations include human and unknown/multiple provider markers; unmarked records are not classified as human.");
+ const groups=$("intel-agents"),contributors=$("intel-contributors"),evidence=$("intel-evidence");
+ groups.replaceChildren();contributors.replaceChildren();evidence.replaceChildren();
+ if(!result.total){empty(groups,cov.loaded?"ไม่มีรายการในตัวกรองนี้":"ยังไม่มีข้อมูลที่อ่านได้");}
+ else for(const [i,g] of result.groups.entries()){
+  const row=n("div","intel-lang-row"),label=n("div","intel-bar-label");
+  label.append(n("strong","",g.name),n("small","",g.count+(cov.partial?"*":"")+" · "+num(g.share)+"%"));
+  row.append(label,meter(g.count,result.total,"intel-language-meter tone-"+i%4,g.name+": "+g.count+" of "+result.total+" observed records"));
+  if(result.kind==="merged_pr")row.append(n("p","muted intel-markers","Median PR cycle: "+(g.cycleHours===null?"—":num(g.cycleHours)+" h")+" · n="+g.cycleN+"/"+g.count));
+  groups.append(row);
+ }
+ if(result.contributors.length){
+  const shown=result.contributors.slice(0,100);
+  table(contributors,["Account","Records","Declared","Bot records"],shown.map(c=>[c.label,c.count+(cov.partial?"*":""),c.declared,c.bots]));
+  if(shown.length<result.contributors.length)contributors.append(n("p","muted intel-foot","Showing "+shown.length+" of "+result.contributors.length+" linked/unlinked actor groups"));
+ }else empty(contributors,"ไม่มีรายการ Contributor ที่โหลดได้");
+ const visible=result.records.slice(0,50);
+ text("intel-evidence-note","Showing "+visible.length+" / "+result.total+" observed records · latest first · ICT");
+ if(visible.length)table(evidence,["Date (ICT)","Repository","Account","Attribution","Evidence","Source"],visible.map(r=>[new Date(r.at).toLocaleDateString("en-GB",{timeZone:"Asia/Bangkok"}),repoLink(r.repo),r.actor?"@"+r.actor+" · "+r.account:"Unlinked",r.agent||"Unattributed",(r.evidence||"No explicit agent evidence")+(r.declared?.length?" · "+r.declared.join(" / "):""),sourceLink(r)]));
+ else empty(evidence,"ไม่มีหลักฐานที่แสดงได้ในตัวกรอง");
+}
+for(const id of ["intel-contribution-kind","intel-contributor"]){
+ $(id).addEventListener("change",()=>{if(id==="intel-contribution-kind")$("intel-contributor").value="all";if(contributionContext)drawContributions(contributionContext);});
+}
+function drawComparison(data,m,opts){
+ const result=compareIntelligence(data,m,opts);
+ const prev=result.priorRange;
+ text("intel-compare-window","Current "+m.range.startDate+" – "+m.range.endDate+" · Previous "+prev.startDate+" – "+prev.endDate+" · ICT");
+ text("intel-compare-note",result.historyGap?"ประวัติช่วงก่อนหน้ายังโหลดไม่ครบ · ใช้ Load comparison history เพื่อขอข้อมูลเพิ่มแบบจำกัดจำนวน":"เปรียบเทียบจากประวัติที่โหลดได้ · ขีดจำกัดหรือข้อมูลขาดหายของแต่ละ Endpoint ยังคงแสดงไว้");
+ table($("intel-compare"),["Metric","Current","Previous","Change","Coverage"],result.metrics.map(r=>{
+  const suffix=r.unit==="h"?" h":r.unit;
+  const delta=r.delta===null?"—":(r.delta>0?"+":"")+num(r.delta)+(r.deltaUnit?" "+r.deltaUnit:"");
+  return [r.label,value(r.current,r.currentCov,suffix),value(r.previous,r.previousCov,suffix),delta,r.reason];
+ }));
+}
+
+const dynamicIds=["intel-trend","intel-trend-table","intel-heat","intel-wip","intel-repos","intel-radar","intel-domains","intel-languages","intel-stack","intel-quality","intel-agents","intel-contributors","intel-evidence","intel-compare"];
 const kpis=["merged","closed","commits","cycle","rate","days"];
-export function resetIntelligence(){
+function clearIntelligence(resetFilters){
+ contributionContext=null;
+ if(resetFilters){$("intel-contribution-kind").value="commit";$("intel-contributor").replaceChildren(new Option("All contributors","all"));}
+ for(const id of ["intel-contrib-total","intel-contrib-declared","intel-contrib-actors"])text(id,"—");
+ for(const id of ["intel-contribution-scope","intel-contrib-note","intel-evidence-note","intel-compare-window","intel-compare-note"])text(id,"");
  for(const id of dynamicIds)$(id).replaceChildren();
  for(const k of kpis){text("intel-"+k,"—");text("intel-"+k+"-note","");}
  for(const id of ["intel-root-note","intel-language-note"])text(id,"");
  text("intel-period","Shared Period · ICT");text("intel-coverage","เชื่อมต่อ GitHub เพื่อเริ่มวิเคราะห์");
  $("intel-cards").hidden=true;$("intel-empty").hidden=false;
 }
+export function resetIntelligence(){clearIntelligence(true);}
 export function renderIntelligence(data,opts={}){
- resetIntelligence();if(!data)return;
+ clearIntelligence(false);if(!data)return;
  const m=analyzeIntelligence(data,opts);
  if(!m.scope.length)return;
  $("intel-empty").hidden=true;$("intel-cards").hidden=false;
@@ -93,9 +151,10 @@ export function renderIntelligence(data,opts={}){
  text("intel-root-note",m.rootLoaded+"/"+m.scope.length+" root scans · "+m.rootCapped+" capped");
  drawRadar(m);drawLanguages(m);
  table($("intel-stack"),["Repository","Languages (top 5 by bytes)","Manifest names","Root evidence"],m.repos.map(r=>[repoLink(r.repo),r.languages===null?"Unavailable":r.languages.slice(0,5).map(x=>x.name).join(", ")||"No language bytes",r.root?r.root.manifests.join(", ")||"No matching marker":"Unavailable",r.root?r.root.domains.filter(d=>d.markers.length).map(d=>d.key+": "+d.markers.join(", ")).join(" · ")||"No matching marker":"Unavailable"]));
+ contributionContext=m;drawContributions(m);drawComparison(data,m,opts);
  const quality=$("intel-quality");
  table(quality,["Source","Loaded / selected","Meaning"],[
-  ["Commits",coverage(m.cov.commits),"Committer dates; default branch only"],
+  ["Commits",coverage(m.cov.commits),"Committer dates; default branch only; actor from linked GitHub author"],
   ["Pull requests",coverage(m.cov.pulls),"Merged by actual merged_at; median created_at → merged_at"],
   ["Issues",coverage(m.cov.issues),"Closed with explicit completed reason and closed_at"],
   ["Workflows",coverage(m.cov.workflows),"Latest observed terminal run records by updated_at; success / all known completed conclusions"],

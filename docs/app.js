@@ -9,7 +9,7 @@ const $=id=>document.getElementById(id);
 initTheme();initOrbit();
 let token="",identity=null,data=null,request=null,expiryTimer=null,session=0;
 let available=[],selected=[],draft=new Set(),discoveryNote="";
-const state={view:"dashboard"};
+const state={view:"dashboard",compareHistory:false};
 const safeDate = v => Number.isFinite(Date.parse(v)) ? new Date(v).toLocaleString("th-TH", {dateStyle:"medium",timeStyle:"short",timeZone:CALENDAR_ZONE}) : "—";
 function el(tag, cls, text) { const n=document.createElement(tag); if(cls)n.className=cls; if(text!==undefined)n.textContent=String(text); return n; }
 function link(title, href) {
@@ -38,7 +38,7 @@ function saveSnapshot(){
   catch{$("snapshot-scope").textContent="ไม่สามารถสร้างไฟล์ HTML ได้ กรุณาลองใหม่";}
 }
 function clearSession(msg="ออกจากระบบแล้ว"){
-  session++;request?.abort();request=null;clearTimeout(expiryTimer);
+  session++;request?.abort();request=null;clearTimeout(expiryTimer);state.compareHistory=false;
   token="";identity=null;data=null;available=[];selected=[];draft.clear();discoveryNote="";
   if($("repo-dialog").open)$("repo-dialog").close();
   updateExport();$("snapshot-scope").textContent="";
@@ -46,7 +46,7 @@ function clearSession(msg="ออกจากระบบแล้ว"){
   $("account-login").textContent="";$("updated").textContent="";$("repo-filter").replaceChildren(new Option("All repositories",""));
   $("repo-count").textContent="";$("repo-dialog-note").textContent="เลือกได้สูงสุด "+MAX_REPOS+" Repository ต่อการเชื่อมต่อ";$("repo-search").value="";$("repo-manual").value="";$("repo-selection-message").textContent="";$("pat-input").value="";
   resetIntelligence();resetOrbit();resetAnalytics();switchView("dashboard");
-  notice("");$("workspace").hidden=true;$("login").hidden=false;$("refresh").disabled=false;$("github-login").disabled=false;$("add-repo").disabled=false;
+  notice("");$("workspace").hidden=true;$("login").hidden=false;$("refresh").disabled=false;$("intel-load-comparison").disabled=false;$("github-login").disabled=false;$("add-repo").disabled=false;
   message(msg);
 }
 function errorText(e){
@@ -125,9 +125,9 @@ async function load(){
   if(!token||!identity)return;
   const current=session,requestedPeriod=$("period").value;request?.abort();
   const controller=new AbortController();request=controller;
-  $("refresh").disabled=true;updateExport();notice("กำลังอัปเดตข้อมูล...");
+  $("refresh").disabled=true;$("intel-load-comparison").disabled=true;updateExport();notice("กำลังอัปเดตข้อมูล...");
   try{
-    const result=await createGitHubClient(token,{signal:controller.signal}).dashboard([...selected],identity,{period:requestedPeriod});
+    const result=await createGitHubClient(token,{signal:controller.signal}).dashboard([...selected],identity,{period:requestedPeriod,compare:state.compareHistory});
     if(current!==session||controller.signal.aborted)return;
     data=result;
     const previous=$("repo-filter").value;
@@ -142,7 +142,7 @@ async function load(){
     if(e.status===401){clearSession(errorText(e));return;}
     notice(errorText(e)+(data?" · แสดงข้อมูลที่โหลดไว้ในเซสชันนี้เท่านั้น":" · ยังไม่มีข้อมูล Dashboard"));
     render();
-  }finally{if(current===session&&request===controller){request=null;$("refresh").disabled=false;updateExport();}}
+  }finally{if(current===session&&request===controller){request=null;$("refresh").disabled=false;$("intel-load-comparison").disabled=false;updateExport();}}
 }
 // Decorative, locally defined SVG icons; upstream strings never become markup.
 const EVENT_PATHS=Object.freeze({
@@ -217,13 +217,14 @@ document.querySelectorAll("[data-view]").forEach(b=>b.addEventListener("click",(
 $("dashboard-type").addEventListener("change",renderDashboard);
 $("analytics-type").addEventListener("change",()=>renderActivityMatrix(data,{names:selected,filter:$("repo-filter").value,period:$("period").value}));
 $("period").addEventListener("change",()=>{
-  const needed=historyRequest($("period").value,data?.fetchedAt?Date.parse(data.fetchedAt):Date.now());
+  const needed=historyRequest($("period").value,data?.fetchedAt?Date.parse(data.fetchedAt):Date.now(),{compare:state.compareHistory});
   render();
   if(token&&identity&&selected.length&&(request||!data||Date.parse(data.historySince)>Date.parse(needed.since)||(data.historyPages||0)<needed.pages))load();
 });$("repo-filter").addEventListener("change",render);
 $("download-html").addEventListener("click",openSnapshot);
 $("cancel-snapshot").addEventListener("click",()=>$("snapshot-dialog").close());
 $("confirm-snapshot").addEventListener("click",saveSnapshot);
+$("intel-load-comparison").addEventListener("click",()=>{if(!token||!identity||request||!selected.length)return;state.compareHistory=true;load();});
 $("refresh").addEventListener("click",load);$("logout").addEventListener("click",()=>clearSession());
 $("github-login").addEventListener("click",connect);$("pat-input").addEventListener("keydown",e=>{if(e.key==="Enter"&&!e.isComposing){e.preventDefault();connect();}});
 $("manage-repos").addEventListener("click",openPicker);$("close-repos").addEventListener("click",()=>$("repo-dialog").close());
@@ -232,7 +233,7 @@ $("apply-repos").addEventListener("click",()=>{
   if(!draft.size||draft.size>MAX_REPOS)return;
   selected=available.filter(r=>draft.has(r.name.toLowerCase())).map(r=>r.name);
   $("repo-dialog").close();
-  data=null;resetAnalytics();resetOrbit();resetIntelligence();updateExport();["activity-list","priority-list","repo-list"].forEach(id=>$(id).replaceChildren());
+  data=null;state.compareHistory=false;resetAnalytics();resetOrbit();resetIntelligence();updateExport();["activity-list","priority-list","repo-list"].forEach(id=>$(id).replaceChildren());
   $("repo-filter").replaceChildren(new Option("All repositories",""));$("updated").textContent="";
   load();
 });

@@ -1,6 +1,7 @@
 // Evidence-based portfolio analytics. No personal proficiency scores, inferred AI attribution,
 // source-file contents, or fabricated history. Dates use the shared Bangkok calendar.
-import {periodRange,bucketKey,calendarDay} from "./period.mjs";
+import {periodRange,previousPeriodRange,bucketKey,calendarDay} from "./period.mjs";
+import {contributionEvidence} from "./contribution-model.mjs";
 const list=x=>Array.isArray(x)?x:[];
 const time=x=>typeof x==="string"?Date.parse(x):NaN;
 const validNumber=x=>Number.isSafeInteger(x)&&x>=0;
@@ -34,10 +35,10 @@ export function normalizePerformance(repo,{commits=[],issueList=[],pulls=[],runs
   const id=identity(x);if(id==null||!Number.isFinite(time(at)))return;
   result.set(repo+":"+kind+":"+String(id),{repo,id:repo+":"+kind+":"+String(id),kind,at,...extra});
  }
- for(const c of list(commits))add("commit",c,c.commit?.committer?.date);
+ for(const c of list(commits))add("commit",c,c.commit?.committer?.date,contributionEvidence(c,"commit",repo));
  for(const p of list(pulls)){
   const merged=time(p.merged_at),created=time(p.created_at);
-  if(Number.isFinite(merged))add("merged_pr",p,p.merged_at,{cycleHours:Number.isFinite(created)&&merged>=created?(merged-created)/3600000:null});
+  if(Number.isFinite(merged))add("merged_pr",p,p.merged_at,{...contributionEvidence(p,"merged_pr",repo),cycleHours:Number.isFinite(created)&&merged>=created?(merged-created)/3600000:null});
   if(p.state==="open")add("open_pr",p,p.created_at||p.updated_at);
  }
  for(const i of list(issueList))if(!i.pull_request&&i.state==="closed"&&i.state_reason==="completed")add("completed_issue",i,i.closed_at);
@@ -49,15 +50,16 @@ function median(values){
  const sorted=[...values].sort((a,b)=>a-b),i=Math.floor(n/2);
  return n%2?sorted[i]:(sorted[i-1]+sorted[i])/2;
 }
-export function analyzeIntelligence(data,{names=[],filter="",period="7",now=Date.now()}={}){
- const asOf=Number.isFinite(time(data?.fetchedAt))?time(data.fetchedAt):now,range=periodRange(period,asOf);
+export function analyzeIntelligence(data,{names=[],filter="",period="7",now=Date.now(),range:rangeOverride=null}={}){
+ const snapshot=Number.isFinite(time(data?.fetchedAt))?time(data.fetchedAt):now,range=rangeOverride||periodRange(period,snapshot),asOf=range.asOf;
  const candidates=[...list(names),...list(data?.repositories).map(r=>r.name),...list(data?.techProfiles).map(r=>r.repo)];
  const scope=[...new Set(candidates.filter(n=>typeof n==="string"&&n&&(!filter||n===filter)))];
  const match=n=>scope.includes(n),errors=list(data?.errors).filter(e=>match(e.repo)),caps=list(data?.truncated).filter(e=>match(e.repo));
- const hasHistory=Array.isArray(data?.performance),historyGap=!Number.isFinite(time(data?.historySince))||time(data.historySince)>range.start;
+ const hasHistory=Array.isArray(data?.performance),since=time(data?.historySince),historyGap=!Number.isFinite(since)||since>range.start,historyOverlap=Number.isFinite(since)&&since<=asOf;
  function coverage(section,historical=true){
   const errorsFor=errors.filter(e=>e.section===section),capsFor=caps.filter(e=>e.section===section);
-  const loaded=hasHistory||!historical?scope.filter(n=>!errorsFor.some(e=>e.repo===n)).length:0;
+  const hasSource=section==="issues"?Array.isArray(data?.issues):hasHistory;
+  const loaded=hasSource&&(!historical||historyOverlap)?scope.filter(n=>!errorsFor.some(e=>e.repo===n)).length:0;
   return {loaded,selected:scope.length,partial:loaded<scope.length||capsFor.length>0||(historical&&historyGap),capped:capsFor.length};
  }
  const cov={commits:coverage("commits"),pulls:coverage("pulls"),issues:coverage("issue_activity"),workflows:coverage("workflows"),openIssues:coverage("issues",false),openPulls:coverage("pulls",false)};
@@ -85,14 +87,35 @@ export function analyzeIntelligence(data,{names=[],filter="",period="7",now=Date
  });
  const repos=scope.map(repo=>{
   const repoCommits=commits.filter(r=>r.repo===repo),repoMerged=merged.filter(r=>r.repo===repo),repoClosed=closed.filter(r=>r.repo===repo),repoRuns=runs.filter(r=>r.repo===repo);
-  const available=section=>!errors.some(e=>e.repo===repo&&e.section===section),partial=section=>caps.some(e=>e.repo===repo&&e.section===section)||historyGap;
+  const available=section=>hasHistory&&historyOverlap&&!errors.some(e=>e.repo===repo&&e.section===section),partial=section=>caps.some(e=>e.repo===repo&&e.section===section)||historyGap;
   const profile=tech.find(r=>r.repo===repo);
   return {repo,commits:available("commits")?repoCommits.length:null,merged:available("pulls")?repoMerged.length:null,closed:available("issue_activity")?repoClosed.length:null,runs:available("workflows")?repoRuns.length:null,success:repoRuns.filter(r=>r.conclusion==="success").length,
    partial:{commits:partial("commits"),merged:partial("pulls"),closed:partial("issue_activity"),runs:partial("workflows")},
    languages:profile?.languages??null,root:profile?.root??null};
  });
- return {range,scope,cov,errors,caps,historyGap,series,commits:commits.length,merged:merged.length,closed:closed.length,
+ return {range,scope,cov,errors,caps,historyGap,historyOverlap,contributions:within.filter(r=>r.kind==="commit"||r.kind==="merged_pr"),series,commits:commits.length,merged:merged.length,closed:closed.length,
   cycleHours:median(cycles),cycleN:cycles.length,runTotal:runs.length,runSuccess:success,runRate:runs.length?100*success/runs.length:null,activeDays,
   openIssues:openIssues.length,blocked:openIssues.filter(i=>i.blocked).length,openPRs:openPRs.length,
   languages,totalBytes,domains,rootLoaded:rootLoaded.length,rootCapped:rootLoaded.filter(r=>r.root.capped).length,langLoaded:langLoaded.length,repos};
+}
+
+export function compareIntelligence(data,current,opts={}){
+ const priorRange=previousPeriodRange(current.range),prior=analyzeIntelligence(data,{...opts,range:priorRange});
+ const metrics=[
+  ["commits","Commits","commits",current.commits,prior.commits,""],
+  ["merged","Merged PRs","pulls",current.merged,prior.merged,""],
+  ["closed","Completed issues","issues",current.closed,prior.closed,""],
+  ["cycle","Median PR cycle","pulls",current.cycleHours,prior.cycleHours,"h"],
+  ["rate","Workflow success","workflows",current.runRate,prior.runRate,"%"],
+  ["days","Commit-active days","commits",current.activeDays,prior.activeDays,""]
+ ].map(([key,label,section,a,b,unit])=>{
+  const currentCov=current.cov[section],previousCov=prior.cov[section];
+  const valid=typeof a==="number"&&Number.isFinite(a)&&typeof b==="number"&&Number.isFinite(b);
+  // Never present a change as measured when either period has missing/capped coverage.
+  // A median is suppressed if a loaded merged PR lacks usable start/end timestamps.
+  const complete=key!=="cycle"||(current.cycleN===current.merged&&prior.cycleN===prior.merged);
+  const comparable=valid&&complete&&currentCov.loaded>0&&previousCov.loaded>0&&!currentCov.partial&&!previousCov.partial;
+  return {key,label,unit,current:a,previous:b,currentCov,previousCov,delta:comparable?a-b:null,deltaUnit:unit==="%"?"pp":unit,reason:!valid?"No comparable observations":!complete?"Missing PR cycle timestamps":comparable?"Bounded sample":"Incomplete or capped coverage"};
+ });
+ return {priorRange,priorOverlap:prior.historyOverlap,historyGap:prior.historyGap,metrics};
 }
