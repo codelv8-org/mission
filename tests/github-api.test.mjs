@@ -32,7 +32,7 @@ test("verify GitHub identity, discover and select repositories, normalize real d
  const found=await client.discover();assert.deepEqual(found.repositories.map(r=>r.name),["org/a","org/b"]);
  const data=await client.dashboard(["org/a"],u);
  assert.equal(data.repositories.length,1);assert.equal(data.issues.length,1);assert.equal(data.issues[0].priority,"P0");
- assert.equal(calls.filter(v=>v.includes("/repos/org/a")).length,6);assert.ok(!JSON.stringify(data).includes(token));
+ assert.equal(calls.filter(v=>v.includes("/repos/org/a")).length,7);assert.ok(!JSON.stringify(data).includes(token));
 });
 test("pagination is bounded and de-duplicated",async()=>{
  const {client,calls}=mock(url=>url.includes("/user/repos?")?json([repo("org/a")],200,{link:'<https://evil.example/?page=2>; rel="next"'}):null);

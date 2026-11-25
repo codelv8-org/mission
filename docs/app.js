@@ -1,10 +1,11 @@
 import {createGitHubClient,isFineGrainedPAT,validRepo,MAX_REPOS} from "./github-api.mjs";
 import {renderAnalytics,resetAnalytics} from "./analytics-view.mjs";
+import {initOrbit,renderOrbit,resetOrbit,orbitScope} from "./orbit-view.mjs";
 import {initTheme} from "./theme.mjs";
 import {downloadSnapshot} from "./snapshot.mjs";
 import {historyRequest,periodRange,CALENDAR_ZONE} from "./period.mjs";
 const $=id=>document.getElementById(id);
-initTheme();
+initTheme();initOrbit();
 let token="",identity=null,data=null,request=null,expiryTimer=null,session=0;
 let available=[],selected=[],draft=new Set(),discoveryNote="";
 const state={view:"overview"};
@@ -22,7 +23,7 @@ function notice(msg){$("notice").hidden=!msg;$("notice").textContent=msg||"";}
 function canExport(){return !!token&&!!data&&Number.isFinite(Date.parse(data.fetchedAt))&&!request&&!$("workspace").hidden;}
 function updateExport(){$("download-html").disabled=!canExport();if(!canExport()&&$("snapshot-dialog").open)$("snapshot-dialog").close();}
 function exportScope(){
-  return {view:state.view,scope:$("repo-filter").selectedOptions[0]?.textContent||"All repositories",period:($("period").selectedOptions[0]?.textContent||"")+" · "+periodRange($("period").value,Date.parse(data.fetchedAt)).startDate+" – "+periodRange($("period").value,Date.parse(data.fetchedAt)).endDate+" · "+CALENDAR_ZONE,eventType:state.view==="dashboard"?$("analytics-type").selectedOptions[0]?.textContent:"",fetchedAt:data?.fetchedAt};
+  return {view:state.view,scope:$("repo-filter").selectedOptions[0]?.textContent||"All repositories",period:($("period").selectedOptions[0]?.textContent||"")+" · "+periodRange($("period").value,Date.parse(data.fetchedAt)).startDate+" – "+periodRange($("period").value,Date.parse(data.fetchedAt)).endDate+" · "+CALENDAR_ZONE,eventType:state.view==="dashboard"?[$("analytics-type").selectedOptions[0]?.textContent,orbitScope()].join(" · "):state.view==="activity"?orbitScope():"",fetchedAt:data?.fetchedAt};
 }
 function openSnapshot(){
   if(!canExport())return;
@@ -44,7 +45,7 @@ function clearSession(msg="ออกจากระบบแล้ว"){
   ["m-repos","m-commits","m-issues","m-priority"].forEach(id=>$(id).textContent="—");
   $("account-login").textContent="";$("updated").textContent="";$("repo-filter").replaceChildren(new Option("All repositories",""));
   $("repo-count").textContent="";$("repo-dialog-note").textContent="เลือกได้สูงสุด "+MAX_REPOS+" Repository ต่อการเชื่อมต่อ";$("repo-search").value="";$("repo-manual").value="";$("repo-selection-message").textContent="";$("pat-input").value="";
-  resetAnalytics();switchView("overview");
+  resetOrbit();resetAnalytics();switchView("overview");
   notice("");$("workspace").hidden=true;$("login").hidden=false;$("refresh").disabled=false;$("github-login").disabled=false;$("add-repo").disabled=false;
   message(msg);
 }
@@ -79,7 +80,7 @@ async function connect(){
     if(current!==session)return;
     selected=available.slice(0,Math.min(8,MAX_REPOS)).map(r=>r.name);
     $("account-login").textContent="@"+identity.login;
-    $("login").hidden=true;$("workspace").hidden=false;
+    $("login").hidden=true;$("workspace").hidden=false;switchView("dashboard");
     expiryTimer=setTimeout(()=>clearSession("เซสชันครบ 1 ชั่วโมง กรุณาเชื่อมต่อใหม่"),3600000);
     if(request===controller)request=null;
     if(selected.length)await load();else{data={repositories:[],activity:[],issues:[],errors:[],user:identity};render();openPicker();}
@@ -166,7 +167,11 @@ function item(box, icon, title, href, meta, cls="") {
 function renderDashboard(){
   renderAnalytics(data,{names:selected,filter:$("repo-filter").value,period:$("period").value,onProject:name=>{if([...$("repo-filter").options].some(o=>o.value===name)){$("repo-filter").value=name;render();}}});
 }
+function renderProjectTimeline(){
+  renderOrbit(data,{names:selected,filter:$("repo-filter").value,onRepoChange:name=>{if([...$("repo-filter").options].some(o=>o.value===name)){$("repo-filter").value=name;render();}}});
+}
 function render(){
+  if(state.view==="dashboard"||state.view==="activity")renderProjectTimeline();
   if(state.view==="dashboard")renderDashboard();
   if(!data)return;
   const filter=$("repo-filter").value,range=periodRange($("period").value,Number.isFinite(Date.parse(data.fetchedAt))?Date.parse(data.fetchedAt):Date.now());
@@ -192,10 +197,12 @@ function render(){
 }
 function switchView(view){
   state.view=view;const names={overview:"Overview",dashboard:"Dashboard",activity:"Timeline",priority:"Priority",repositories:"Repositories"};
-  $("view-title").textContent=names[view];$("headline").textContent=view==="overview"?"Your work, in focus.":view==="dashboard"?"Project Analytics Dashboard":names[view];
+  $("view-title").textContent=names[view];$("headline").textContent=view==="overview"?"Your work, in focus.":view==="dashboard"?"Plan the work. See the flow.":names[view];
   $("view-description").textContent=view==="dashboard"?"วิเคราะห์กิจกรรมและสัญญาณของโปรเจกต์จากข้อมูล GitHub ที่โหลดได้":"ติดตามโปรเจกต์และวางแผนงานจากข้อมูลจริงบน GitHub";
   $("metrics").hidden=view!=="overview";
   $("analytics").hidden=view!=="dashboard";
+  $("orbit").hidden=view!=="dashboard"&&view!=="activity";
+  if(view==="dashboard"||view==="activity")renderProjectTimeline();
   $("panels").hidden=view==="dashboard";
   if(view==="dashboard")renderDashboard();
   ["activity","priority","repositories"].forEach(v=>$(v+"-panel").hidden=view!=="overview"&&view!==v);
@@ -221,7 +228,7 @@ $("apply-repos").addEventListener("click",()=>{
   if(!draft.size||draft.size>MAX_REPOS)return;
   selected=available.filter(r=>draft.has(r.name.toLowerCase())).map(r=>r.name);
   $("repo-dialog").close();
-  data=null;resetAnalytics();updateExport();["activity-list","priority-list","repo-list"].forEach(id=>$(id).replaceChildren());
+  data=null;resetAnalytics();resetOrbit();updateExport();["activity-list","priority-list","repo-list"].forEach(id=>$(id).replaceChildren());
   ["m-repos","m-commits","m-issues","m-priority"].forEach(id=>$(id).textContent="—");$("repo-filter").replaceChildren(new Option("All repositories",""));$("updated").textContent="";
   load();
 });
