@@ -48,10 +48,10 @@ function median(values){if(!values.length)return null;const sorted=[...values].s
 export function analyzeContributions(rows,{kind="commit",actor="all"}={}){
  if(!["commit","merged_pr"].includes(kind))kind="commit";
  const all=list(rows).filter(r=>r.kind===kind),actors=new Map();
- for(const r of all){const key=r.actor||"unlinked";const item=actors.get(key)||{key,label:r.actor?"@"+r.actor:"Unlinked actor",count:0,declared:0,bots:0};item.count++;if(list(r.declared).length)item.declared++;if(r.account==="Bot")item.bots++;actors.set(key,item);}
+ for(const r of all){const key=r.actor?"login:"+r.actor:"unlinked";const item=actors.get(key)||{key,label:r.actor?"@"+r.actor:"Unlinked actor",count:0,declared:0,bots:0};item.count++;if(list(r.declared).length)item.declared++;if(r.account==="Bot")item.bots++;actors.set(key,item);}
  const contributors=[...actors.values()].sort((a,b)=>b.count-a.count||a.key.localeCompare(b.key));
  if(actor!=="all"&&!actors.has(actor))actor="all";
- const selected=all.filter(r=>actor==="all"||(r.actor||"unlinked")===actor);
+ const selected=all.filter(r=>actor==="all"||(r.actor?"login:"+r.actor:"unlinked")===actor);
  const groups=new Map();
  for(const r of selected){
   const key=r.agent||"Unattributed",g=groups.get(key)||{name:key,count:0,cycles:[],declared:0};

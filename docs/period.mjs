@@ -31,7 +31,7 @@ export function monthGroups(dates){
   for(const date of dates){const key=date.slice(0,7);const last=groups.at(-1);if(last?.key===key)last.span++;else groups.push({key,date:key+"-01",span:1});}
   return groups;
 }
-// Previous immediately adjacent window of the same elapsed duration, including
+// Previous calendar window of the same elapsed duration, including
 // the same number of ICT calendar dates and equivalent time-of-day on its last day.
 export function previousPeriodRange(range){
   const elapsed=range.asOf-range.start+1,days=Math.round((Date.parse(range.endDate+"T00:00:00Z")-Date.parse(range.startDate+"T00:00:00Z"))/DAY)+1;

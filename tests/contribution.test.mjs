@@ -23,9 +23,9 @@ test("agent declarations require an exact terminal trailer or label; no automati
 test("group counts, contributor filter, separate record units and median cycle",()=>{
  const rows=normalizePerformance(repo,{commits:[c("Fix\n\nAI-Agent: Codex"),{...c("Other",{login:"bob",type:"User"}),sha:"fedcba987654"}],pulls:[{number:1,state:"closed",created_at:"2026-11-22T02:00:00Z",merged_at:at,user:{login:"alice",type:"User"},labels:["ai-agent:codex"]}]});
  const all=analyzeContributions(rows);assert.equal(all.total,2);assert.equal(all.declared,1);assert.equal(all.groups.reduce((n,g)=>n+g.count,0),2);
- assert.equal(analyzeContributions(rows,{actor:"bob"}).groups[0].name,"Unattributed");
+ assert.equal(analyzeContributions(rows,{actor:"login:bob"}).groups[0].name,"Unattributed");
  assert.equal(analyzeContributions(rows,{kind:"merged_pr"}).groups[0].cycleHours,24);
- assert.equal(analyzeContributions(rows,{kind:"merged_pr",actor:"bob"}).actor,"all");
+ assert.equal(analyzeContributions(rows,{kind:"merged_pr",actor:"login:bob"}).actor,"all");
 });
 test("previous ranges preserve elapsed time, including monthly and yearly periods",()=>{
  for(const period of ["7","30","month","year"]){
@@ -46,4 +46,9 @@ test("comparison suppresses deltas for missing history, caps, permissions and un
  const cap=get({...data,truncated:[{repo,section:"commits"}]});assert.equal(cap.find(x=>x.key==="commits").delta,null);
  const gap=get({...data,historySince:"2026-11-19T00:00:00Z"});assert.equal(gap.find(x=>x.key==="commits").previousCov.loaded,0);
  assert.equal(get({...data,errors:[{repo,section:"commits"}]}).find(x=>x.key==="commits").delta,null);
+});
+
+test("real account names cannot collide with filter sentinels",()=>{
+ const rows=normalizePerformance(repo,{commits:[c("Fix",{login:"all",type:"User"}),{...c("Fix",{login:"unlinked",type:"User"}),sha:"fedcba987654"},{...c("Fix",null),sha:"123456789abcd"}]});
+ const result=analyzeContributions(rows);assert.equal(result.contributors.length,3);assert.equal(analyzeContributions(rows,{actor:"login:all"}).total,1);assert.equal(analyzeContributions(rows,{actor:"unlinked"}).total,1);
 });

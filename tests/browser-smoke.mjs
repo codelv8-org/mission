@@ -90,7 +90,7 @@ try{
  assert.equal(await ev("document.querySelector('#intel-contrib-declared').textContent"),"5");
  await ev("document.querySelector('#intel-contribution-kind').value='merged_pr';document.querySelector('#intel-contribution-kind').dispatchEvent(new Event('change'))");
  assert.equal(await ev("document.querySelector('#intel-contrib-total').textContent"),"5");assert.ok(await ev("document.querySelector('#intel-agents').textContent.includes('Claude Code') && document.querySelector('#intel-agents').textContent.includes('24 h')"));
- await ev("document.querySelector('#intel-contributor').value='fixture-dev';document.querySelector('#intel-contributor').dispatchEvent(new Event('change'))");
+ await ev("document.querySelector('#intel-contributor').value='login:fixture-dev';document.querySelector('#intel-contributor').dispatchEvent(new Event('change'))");
  assert.ok(await ev("document.querySelector('#intel-contribution-scope').textContent.includes('@fixture-dev')"));
  assert.equal(await ev("document.querySelectorAll('#intel-evidence tbody tr').length"),5);
  await ev("document.querySelector('#intel-contribution-kind').value='commit';document.querySelector('#intel-contribution-kind').dispatchEvent(new Event('change'))");
