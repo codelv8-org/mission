@@ -233,7 +233,7 @@ $("apply-repos").addEventListener("click",()=>{
   if(!draft.size||draft.size>MAX_REPOS)return;
   selected=available.filter(r=>draft.has(r.name.toLowerCase())).map(r=>r.name);
   $("repo-dialog").close();
-  data=null;state.compareHistory=false;resetAnalytics();resetOrbit();resetIntelligence();updateExport();["activity-list","priority-list","repo-list"].forEach(id=>$(id).replaceChildren());
+  state.compareHistory=false;data=null;resetAnalytics();resetOrbit();resetIntelligence();updateExport();["activity-list","priority-list","repo-list"].forEach(id=>$(id).replaceChildren());
   $("repo-filter").replaceChildren(new Option("All repositories",""));$("updated").textContent="";
   load();
 });
