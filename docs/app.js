@@ -2,7 +2,7 @@ import {createGitHubClient,isFineGrainedPAT,validRepo,MAX_REPOS} from "./github-
 import {renderAnalytics,renderActivityMatrix,resetAnalytics} from "./analytics-view.mjs";
 import {initOrbit,renderOrbit,resetOrbit,orbitScope} from "./orbit-view.mjs";
 import {initTheme} from "./theme.mjs";
-import {renderIntelligence,resetIntelligence} from "./intelligence-view.mjs";
+import {renderIntelligence,renderPerformance,resetIntelligence} from "./intelligence-view.mjs";
 import {downloadSnapshot} from "./snapshot.mjs";
 import {historyRequest,periodRange,CALENDAR_ZONE} from "./period.mjs";
 const $=id=>document.getElementById(id);
@@ -175,8 +175,10 @@ function renderTimelinePage(){
   renderActivityMatrix(data,{names:selected,filter:$("repo-filter").value,period:$("period").value});
 }
 function renderAnalyze(){renderIntelligence(data,{names:selected,filter:$("repo-filter").value,period:$("period").value});}
+function renderPerformancePage(){renderPerformance(data,{names:selected,filter:$("repo-filter").value,period:$("period").value});}
 function render(){
   if(state.view==="analyze")renderAnalyze();
+  if(state.view==="performance")renderPerformancePage();
   if(state.view==="activity")renderTimelinePage();
   if(state.view==="dashboard")renderDashboard();
   if(!data)return;
@@ -195,20 +197,22 @@ function render(){
   if(!repos.length)empty(rl,"ไม่พบ Repository ที่โหลดสำเร็จ");
 }
 function switchView(view){
-  const names={dashboard:"Dashboard",activity:"Timeline",analyze:"Analyze",priority:"Priority",repositories:"Repositories"};
+  const names={dashboard:"Dashboard",activity:"Timeline",analyze:"Analyze",performance:"Performance",priority:"Priority",repositories:"Repositories"};
   if(!Object.hasOwn(names,view))view="dashboard";
   state.view=view;
-  $("view-title").textContent=names[view];$("headline").textContent=view==="dashboard"?"Project Analytics Dashboard":view==="analyze"?"Developer Intelligence":names[view];
-  $("view-description").textContent=view==="dashboard"?"วิเคราะห์กิจกรรมและสัญญาณของโปรเจกต์จากข้อมูล GitHub ที่โหลดได้":view==="activity"?"ติดตามช่วงเวลาดำเนินงานและกิจกรรมจาก GitHub โดยใช้ Period กลาง":view==="analyze"?"วิเคราะห์การส่งมอบงาน เทคโนโลยี และหลักฐานการพัฒนาใน Repository":"ติดตามโปรเจกต์จากข้อมูลจริงบน GitHub";
+  $("view-title").textContent=names[view];$("headline").textContent=view==="dashboard"?"Project Analytics Dashboard":view==="analyze"?"Developer Intelligence":view==="performance"?"Development Performance":names[view];
+  $("view-description").textContent=view==="dashboard"?"วิเคราะห์กิจกรรมและสัญญาณของโปรเจกต์จากข้อมูล GitHub ที่โหลดได้":view==="activity"?"ติดตามช่วงเวลาดำเนินงานและกิจกรรมจาก GitHub โดยใช้ Period กลาง":view==="analyze"?"วิเคราะห์ทักษะ เทคโนโลยี หลักฐานการมีส่วนร่วม และข้อเสนอแนะด้านวิศวกรรม":view==="performance"?"วิเคราะห์การส่งมอบงาน ความต่อเนื่อง ความน่าเชื่อถือของ Workflow และเปรียบเทียบช่วงเวลา":"ติดตามโปรเจกต์จากข้อมูลจริงบน GitHub";
   $("analytics").hidden=view!=="dashboard";
   $("intelligence").hidden=view!=="analyze";
+  $("performance").hidden=view!=="performance";
   $("orbit").hidden=view!=="activity";
   $("activity-matrix").hidden=view!=="activity";
-  $("panels").hidden=view==="dashboard"||view==="analyze";
+  $("panels").hidden=view==="dashboard"||view==="analyze"||view==="performance";
   ["activity","priority","repositories"].forEach(v=>$(v+"-panel").hidden=view!==v);
   $("panels").classList.add("single");
   if(view==="dashboard")renderDashboard();
   if(view==="analyze")renderAnalyze();
+  if(view==="performance")renderPerformancePage();
   if(view==="activity")renderTimelinePage();
   document.querySelectorAll("[data-view]").forEach(b=>{const on=b.dataset.view===view;b.classList.toggle("active",on);if(on)b.setAttribute("aria-current","page");else b.removeAttribute("aria-current");});
 }
