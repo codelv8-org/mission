@@ -2,6 +2,7 @@
 // source-file contents, or fabricated history. Dates use the shared Bangkok calendar.
 import {periodRange,previousPeriodRange,bucketKey,calendarDay} from "./period.mjs";
 import {contributionEvidence} from "./contribution-model.mjs";
+import {safeInsightSource} from "./insight-model.mjs";
 const list=x=>Array.isArray(x)?x:[];
 const time=x=>typeof x==="string"?Date.parse(x):NaN;
 const validNumber=x=>Number.isSafeInteger(x)&&x>=0;
@@ -39,10 +40,10 @@ export function normalizePerformance(repo,{commits=[],issueList=[],pulls=[],runs
  for(const p of list(pulls)){
   const merged=time(p.merged_at),created=time(p.created_at);
   if(Number.isFinite(merged))add("merged_pr",p,p.merged_at,{...contributionEvidence(p,"merged_pr",repo),cycleHours:Number.isFinite(created)&&merged>=created?(merged-created)/3600000:null});
-  if(p.state==="open")add("open_pr",p,p.created_at||p.updated_at);
+  if(p.state==="open")add("open_pr",p,p.created_at||p.updated_at,{createdAt:Number.isFinite(created)?p.created_at:null,source:safeInsightSource(p.html_url,repo,"pull")});
  }
  for(const i of list(issueList))if(!i.pull_request&&i.state==="closed"&&i.state_reason==="completed")add("completed_issue",i,i.closed_at);
- for(const w of list(runs))if(w.status==="completed"&&CONCLUSIONS.has(w.conclusion))add("workflow",w,w.updated_at,{conclusion:w.conclusion});
+ for(const w of list(runs))if(w.status==="completed"&&CONCLUSIONS.has(w.conclusion))add("workflow",w,w.updated_at,{conclusion:w.conclusion,source:safeInsightSource(w.html_url,repo,"workflow")});
  return [...result.values()];
 }
 function median(values){

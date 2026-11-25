@@ -1,5 +1,6 @@
 import {analyzeIntelligence,compareIntelligence} from "./intelligence-model.mjs";
 import {analyzeContributions} from "./contribution-model.mjs";
+import {buildInsights,INSIGHT_CATEGORIES} from "./insight-model.mjs";
 const $=id=>document.getElementById(id);
 const n=(tag,cls,txt)=>{const e=document.createElement(tag);if(cls)e.className=cls;if(txt!==undefined)e.textContent=String(txt);return e;};
 const text=(id,v)=>{$(id).textContent=v;};
@@ -67,6 +68,45 @@ function drawLanguages(m){
  }
 }
 
+
+let insightContext=null,insightLimit=8;
+const insightLabels={act:"Action signals",review:"Review prompts",verify:"Evidence checks",observed:"Observed delivery"};
+const insightIcons={act:"!",review:"↗",verify:"?",observed:"✓"};
+function insightLink(item){
+ if(!item.source)return null;
+ const a=n("a","intel-repo-link","Open evidence on GitHub ↗");
+ a.href=item.source;a.target="_blank";a.rel="noopener noreferrer";return a;
+}
+function drawInsightList(){
+ const root=$("intel-insight-list"),filter=$("intel-insight-filter").value;
+ root.replaceChildren();if(!insightContext)return;
+ const rows=insightContext.findings.filter(row=>filter==="all"||filter===row.category),visible=rows.slice(0,insightLimit);
+ for(const item of visible){
+  const card=n("article","intel-insight-item insight-"+item.category),head=n("div","intel-insight-head"),left=n("div","intel-insight-title");
+  left.append(n("span","intel-insight-badge",INSIGHT_CATEGORIES[item.category]),n("h3","",item.title));
+  head.append(left,n("span","intel-insight-repo",item.repo||"Portfolio"));
+  card.append(head,n("p","intel-insight-evidence",item.evidence),n("p","intel-insight-action",item.action),n("p","muted intel-foot",item.limitation));
+  const source=insightLink(item);if(source)card.append(source);root.append(card);
+ }
+ if(!visible.length)empty(root,"ไม่พบสัญญาณที่ตรงกับตัวกรองในข้อมูลที่โหลดได้ · ไม่ใช่การรับรองว่าไม่มีปัญหา");
+ text("intel-insight-count","Showing "+visible.length+" / "+rows.length+" findings · "+(filter==="all"?"All types":INSIGHT_CATEGORIES[filter]));
+ $("intel-insight-more").hidden=rows.length<=visible.length;
+}
+function drawInsights(data,m,comparison){
+ insightContext=buildInsights(data,m,comparison);
+ const summary=$("intel-insight-summary");summary.replaceChildren();
+ for(const key of ["act","review","verify","observed"]){
+  const tile=n("article","card intel-insight-kpi insight-"+key),icon=n("span","intel-insight-icon",insightIcons[key]),copy=n("div","");
+  copy.append(n("small","",insightLabels[key]),n("strong","",insightContext.counts[key]),n("span","muted","Rule matches"));
+  tile.append(icon,copy);summary.append(tile);
+ }
+ text("intel-insight-scope",m.scope.length+" repositories · "+m.range.startDate+" – "+m.range.endDate+" ICT · current queue / root snapshot");
+ drawInsightList();
+ table($("intel-practice-review"),["Practice","Root marker observed","Repositories to verify","Suggested check"],insightContext.practices.map(p=>[p.label,p.present.length+"/"+p.scanned+" scanned · "+(p.selected-p.scanned)+" not assessed",p.review.length?p.review.join(", "):p.scanned?"No root-marker review prompts":"Not assessed",p.action]));
+}
+$("intel-insight-filter").addEventListener("change",()=>{insightLimit=8;drawInsightList();});
+$("intel-insight-more").addEventListener("click",()=>{insightLimit+=12;drawInsightList();});
+
 let contributionContext=null;
 function sourceLink(row){
  if(!row.source)return "—";
@@ -106,8 +146,7 @@ function drawContributions(m){
 for(const id of ["intel-contribution-kind","intel-contributor"]){
  $(id).addEventListener("change",()=>{if(id==="intel-contribution-kind")$("intel-contributor").value="all";if(contributionContext)drawContributions(contributionContext);});
 }
-function drawComparison(data,m,opts){
- const result=compareIntelligence(data,m,opts);
+function drawComparison(data,m,opts,result=compareIntelligence(data,m,opts)){
  const prev=result.priorRange;
  text("intel-compare-window","Current "+m.range.startDate+" – "+m.range.endDate+" · Previous "+prev.startDate+" – "+prev.endDate+" · ICT");
  text("intel-compare-note",result.historyGap?"ประวัติช่วงก่อนหน้ายังโหลดไม่ครบ · ใช้ Load comparison history เพื่อขอข้อมูลเพิ่มแบบจำกัดจำนวน":"เปรียบเทียบจากประวัติที่โหลดได้ · ขีดจำกัดหรือข้อมูลขาดหายของแต่ละ Endpoint ยังคงแสดงไว้");
@@ -118,11 +157,12 @@ function drawComparison(data,m,opts){
  }));
 }
 
-const dynamicIds=["intel-trend","intel-trend-table","intel-heat","intel-wip","intel-repos","intel-radar","intel-domains","intel-languages","intel-stack","intel-quality","intel-agents","intel-contributors","intel-evidence","intel-compare"];
+const dynamicIds=["intel-trend","intel-trend-table","intel-heat","intel-wip","intel-repos","intel-radar","intel-domains","intel-languages","intel-stack","intel-quality","intel-agents","intel-contributors","intel-evidence","intel-compare","intel-insight-summary","intel-insight-list","intel-practice-review"];
 const kpis=["merged","closed","commits","cycle","rate","days"];
 function clearIntelligence(resetFilters){
- contributionContext=null;
- if(resetFilters){$("intel-contribution-kind").value="commit";$("intel-contributor").replaceChildren(new Option("All contributors","all"));}
+ contributionContext=null;insightContext=null;insightLimit=8;
+ $("intel-insight-more").hidden=true;text("intel-insight-count","");text("intel-insight-scope","");
+ if(resetFilters){$("intel-insight-filter").value="all";$("intel-contribution-kind").value="commit";$("intel-contributor").replaceChildren(new Option("All contributors","all"));}
  for(const id of ["intel-contrib-total","intel-contrib-declared","intel-contrib-actors"])text(id,"—");
  for(const id of ["intel-contribution-scope","intel-contrib-note","intel-evidence-note","intel-compare-window","intel-compare-note"])text(id,"");
  for(const id of dynamicIds)$(id).replaceChildren();
@@ -151,7 +191,9 @@ export function renderIntelligence(data,opts={}){
  text("intel-root-note",m.rootLoaded+"/"+m.scope.length+" root scans · "+m.rootCapped+" capped");
  drawRadar(m);drawLanguages(m);
  table($("intel-stack"),["Repository","Languages (top 5 by bytes)","Manifest names","Root evidence"],m.repos.map(r=>[repoLink(r.repo),r.languages===null?"Unavailable":r.languages.slice(0,5).map(x=>x.name).join(", ")||"No language bytes",r.root?r.root.manifests.join(", ")||"No matching marker":"Unavailable",r.root?r.root.domains.filter(d=>d.markers.length).map(d=>d.key+": "+d.markers.join(", ")).join(" · ")||"No matching marker":"Unavailable"]));
- contributionContext=m;drawContributions(m);drawComparison(data,m,opts);
+ const comparison=compareIntelligence(data,m,opts);
+ drawInsights(data,m,comparison);
+ contributionContext=m;drawContributions(m);drawComparison(data,m,opts,comparison);
  const quality=$("intel-quality");
  table(quality,["Source","Loaded / selected","Meaning"],[
   ["Commits",coverage(m.cov.commits),"Committer dates; default branch only; actor from linked GitHub author"],

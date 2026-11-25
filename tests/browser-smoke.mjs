@@ -8,7 +8,7 @@ import {join,resolve,extname} from "node:path";
 import {fileURLToPath,pathToFileURL} from "node:url";
 const root=fileURLToPath(new URL("../docs/",import.meta.url));
 const delay=ms=>new Promise(r=>setTimeout(r,ms));
-const wait=async(fn,label)=>{for(let i=0;i<100;i++){try{const result=await fn();if(result)return result;}catch{}await delay(100);}throw Error("Timed out: "+label);};
+const wait=async(fn,label,attempts=100)=>{for(let i=0;i<attempts;i++){try{const result=await fn();if(result)return result;}catch{}await delay(100);}throw Error("Timed out: "+label);};
 const chrome=process.env.CHROME_BIN||["google-chrome","chromium","chromium-browser"].find(name=>spawnSync("sh",["-c","command -v "+name],{stdio:"ignore"}).status===0);
 assert.ok(chrome,"Chromium/Chrome is required on the CI runner");
 const dir=await mkdtemp(join(tmpdir(),"mission-browser-"));
@@ -21,7 +21,8 @@ const server=createServer(async(req,res)=>{
 });
 await new Promise(r=>server.listen(0,"127.0.0.1",r));
 const url="http://127.0.0.1:"+server.address().port+"/";
-const proc=spawn(chrome,["--headless=new","--no-sandbox","--disable-dev-shm-usage","--disable-background-networking","--no-first-run","--remote-debugging-port=0","--user-data-dir="+dir,"about:blank"],{stdio:"ignore"});
+const proc=spawn(chrome,["--headless=new","--no-sandbox","--disable-dev-shm-usage","--disable-background-networking","--no-first-run","--remote-debugging-port=0","--user-data-dir="+dir,"about:blank"],{stdio:["ignore","ignore","pipe"]});
+let chromeLog="";proc.stderr.on("data",chunk=>{chromeLog=(chromeLog+String(chunk)).slice(-8000);});
 let ws;
 function installFixture(){
  window.fixtureRequests=0;
@@ -53,7 +54,7 @@ function installFixture(){
  };
 }
 try{
- const port=await wait(async()=>Number((await readFile(join(dir,"DevToolsActivePort"),"utf8")).split("\n")[0]),"Chrome devtools");
+ const port=await wait(async()=>Number((await readFile(join(dir,"DevToolsActivePort"),"utf8")).split("\n")[0]),"Chrome devtools",450).catch(e=>{throw Error(e.message+"; exit="+proc.exitCode+"; Chrome stderr:\n"+chromeLog);});
  const tabs=await (await fetch("http://127.0.0.1:"+port+"/json/list")).json();
  const page=tabs.find(t=>t.type==="page");assert.ok(page);
  ws=new WebSocket(page.webSocketDebuggerUrl);
@@ -96,6 +97,14 @@ try{
  await ev("document.querySelector('#intel-contribution-kind').value='commit';document.querySelector('#intel-contribution-kind').dispatchEvent(new Event('change'))");
  assert.equal(await ev("document.querySelector('#intel-contributor').value"),"all");
  assert.equal(await ev("document.querySelectorAll('#intel-compare tbody tr').length"),6);
+ assert.equal(await ev("document.querySelectorAll('#intel-insight-summary .intel-insight-kpi').length"),4);
+ assert.ok(await ev("document.querySelector('#intel-insight-list').textContent.includes('Inspect unsuccessful workflow runs')"));
+ assert.equal(await ev("document.querySelectorAll('#intel-practice-review tbody tr').length"),4);
+ await ev("document.querySelector('#intel-insight-filter').value='act';document.querySelector('#intel-insight-filter').dispatchEvent(new Event('change'))");
+ assert.ok(await ev("[...document.querySelectorAll('#intel-insight-list article')].length>0 && [...document.querySelectorAll('#intel-insight-list article')].every(x=>x.classList.contains('insight-act'))"));
+ await ev("document.querySelector('#intel-insight-filter').value='all';document.querySelector('#intel-insight-filter').dispatchEvent(new Event('change'))");
+ if(await ev("!document.querySelector('#intel-insight-more').hidden")){const before=await ev("document.querySelectorAll('#intel-insight-list article').length");await ev("document.querySelector('#intel-insight-more').click()");assert.ok(await ev("document.querySelectorAll('#intel-insight-list article').length")>before);}
+
  await noOverflow("1440 Analyze");await shot("13-analyze-1440");
  await ev("document.querySelector('#repo-filter').value='demo/mission';document.querySelector('#repo-filter').dispatchEvent(new Event('change'))");
  assert.equal(await ev("document.querySelector('#intel-merged').textContent"),"1");assert.equal(await ev("document.querySelectorAll('#intel-stack tbody tr').length"),1);
@@ -108,7 +117,7 @@ try{
  assert.ok(await ev("window.fixtureRequests")>requestsBeforeCompare);
  assert.ok(await ev("!document.querySelector('#intel-compare-note').textContent.includes('ยังโหลดไม่ครบ')"));
  const analyzeHTML=await ev("import('./snapshot.mjs').then(m=>m.buildSnapshot({view:'analyze',scope:'demo/mission',period:'Last 30 days',fetchedAt:new Date().toISOString()}))");
- assert.ok(analyzeHTML.includes('id="intel-agents"')&&analyzeHTML.includes('id="intel-compare"')&&!analyzeHTML.includes('id="intel-contribution-kind"')&&!analyzeHTML.includes('id="intel-load-comparison"')&&analyzeHTML.includes('id="intel-stack"')&&analyzeHTML.includes('Engineering Evidence Radar')&&!analyzeHTML.includes('id="analytics"')&&!analyzeHTML.includes('id="orbit-grid"')&&!analyzeHTML.includes('demo/workspace'));
+ assert.ok(analyzeHTML.includes('id="intel-insight-list"')&&analyzeHTML.includes('id="intel-practice-review"')&&!analyzeHTML.includes('id="intel-insight-filter"')&&analyzeHTML.includes('id="intel-agents"')&&analyzeHTML.includes('id="intel-compare"')&&!analyzeHTML.includes('id="intel-contribution-kind"')&&!analyzeHTML.includes('id="intel-load-comparison"')&&analyzeHTML.includes('id="intel-stack"')&&analyzeHTML.includes('Engineering Evidence Radar')&&!analyzeHTML.includes('id="analytics"')&&!analyzeHTML.includes('id="orbit-grid"')&&!analyzeHTML.includes('demo/workspace'));
  await ev("document.querySelector('#repo-filter').value='';document.querySelector('#repo-filter').dispatchEvent(new Event('change'));document.querySelector('#period').value='7';document.querySelector('#period').dispatchEvent(new Event('change'));document.querySelector('[data-view=dashboard]').click()");
 
  assert.equal(await ev("document.querySelectorAll('.kpi-spark svg').length"),2);
@@ -223,7 +232,7 @@ try{
  await ev("document.querySelector('#manage-repos').click()");await noOverflow("dark mobile dialog");await shot("07-dialog-dark-375");await ev("document.querySelector('#close-repos').click()");
  assert.equal(await ev("getComputedStyle(document.querySelector('#refresh')).transitionDuration"),"0s");
  await ev("document.querySelector('#logout').click()");
- assert.equal(await ev("document.querySelector('#intel-cards').hidden && document.querySelector('#intel-stack').children.length===0 && document.querySelector('#intel-evidence').children.length===0 && document.querySelector('#intel-contributor').options.length===1 && document.querySelector('#analytics-cards').hidden && document.querySelector('#orbit-detail').hidden && document.querySelectorAll('#orbit-grid .orbit-task-row').length===0 && document.querySelector('#timeline-summary').children.length===0 && document.querySelector('#pat-input').value==='' && document.querySelector('#workspace').hidden"),true);
+ assert.equal(await ev("document.querySelector('#intel-cards').hidden && document.querySelector('#intel-stack').children.length===0 && document.querySelector('#intel-evidence').children.length===0 && document.querySelector('#intel-insight-list').children.length===0 && document.querySelector('#intel-insight-filter').value==='all' && document.querySelector('#intel-contributor').options.length===1 && document.querySelector('#analytics-cards').hidden && document.querySelector('#orbit-detail').hidden && document.querySelectorAll('#orbit-grid .orbit-task-row').length===0 && document.querySelector('#timeline-summary').children.length===0 && document.querySelector('#pat-input').value==='' && document.querySelector('#workspace').hidden"),true);
  await viewport(375,812);await noOverflow("mobile login");
  assert.equal(await ev("document.querySelector('#download-html').disabled"),true);
  assert.equal(await ev("document.querySelector('#snapshot-scope').textContent"),"");
