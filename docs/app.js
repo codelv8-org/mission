@@ -45,7 +45,7 @@ function clearSession(msg="ออกจากระบบแล้ว"){
   ["m-repos","m-commits","m-issues","m-priority"].forEach(id=>$(id).textContent="—");
   $("account-login").textContent="";$("updated").textContent="";$("repo-filter").replaceChildren(new Option("All repositories",""));
   $("repo-count").textContent="";$("repo-dialog-note").textContent="เลือกได้สูงสุด "+MAX_REPOS+" Repository ต่อการเชื่อมต่อ";$("repo-search").value="";$("repo-manual").value="";$("repo-selection-message").textContent="";$("pat-input").value="";
-  resetAnalytics();resetOrbit();switchView("overview");
+  resetOrbit();resetAnalytics();switchView("overview");
   notice("");$("workspace").hidden=true;$("login").hidden=false;$("refresh").disabled=false;$("github-login").disabled=false;$("add-repo").disabled=false;
   message(msg);
 }
