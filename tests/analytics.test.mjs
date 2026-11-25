@@ -38,8 +38,8 @@ test("dashboard navigation, analytics DOM contract, local-only rendering and res
  const ids=[...html.matchAll(/\bid="([^"]+)"/g)].map(m=>m[1]);assert.equal(ids.length,new Set(ids).size);
  for(const id of [...view.matchAll(/\$\("([^"]+)"\)/g)].map(m=>m[1]))assert.ok(ids.includes(id),id);
  assert.match(html,/data-view="dashboard"/);assert.match(html,/id="analytics"[^>]+hidden/);assert.match(html,/id="project-timeline"/);
- assert.match(app,/resetAnalytics\(\);switchView\("overview"\)/);assert.match(app,/\$\("analytics"\).hidden=view!=="dashboard"/);
- assert.match(app,/data=null;resetAnalytics\(\)/);
+ assert.match(app,/resetAnalytics\(\);switchView\("dashboard"\)/);assert.match(app,/\$\("analytics"\).hidden=view!=="dashboard"/);
+ assert.match(app,/data=null;resetAnalytics\(\)/);assert.match(app,/\$\("orbit"\)\.hidden=view!=="activity"/);assert.match(app,/\$\("activity-matrix"\)\.hidden=view!=="activity"/);assert.ok(!/data-view="overview"/.test(html));
  assert.match(view,/button\.setAttribute\("aria-pressed"/);assert.match(view,/u\.hostname==="github\.com"/);
  assert.ok(!/innerHTML|outerHTML|insertAdjacentHTML|\bfetch\(|localStorage|sessionStorage/.test(view));
  assert.ok(!/@import|url\(\s*["']?https?:/.test(css));assert.match(layout,/\.nav\.active/);assert.match(layout,/\.sidebar nav \{ display:grid/);assert.match(css,/grid-template-columns:repeat\(12,minmax\(0,1fr\)\)/);

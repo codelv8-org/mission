@@ -18,11 +18,11 @@ test("normalizes source dates and per-repo identities; avoids invented percentag
  assert.equal(rows.find(r=>r.type==="milestone"&&r.number===1).endAt,"2026-12-01T00:00:00.000Z");
 });
 test("clips open intervals and point events in ICT without stretching beyond snapshot",()=>{
- const w=orbitWindow(now,14),rows=normalizeOrbit("org/a",{issueList:[item],commits:[{sha:"a",commit:{message:"Commit",committer:{date:"2026-11-24T19:00:00Z"}}}]});
- assert.equal(w.today,"2026-11-25");assert.equal(w.dates.length,14);
+ const w=orbitWindow(now,"30"),rows=normalizeOrbit("org/a",{issueList:[item],commits:[{sha:"a",commit:{message:"Commit",committer:{date:"2026-11-24T19:00:00Z"}}}]});
+ assert.equal(w.today,"2026-11-25");assert.equal(w.dates.length,30);
  const issue=clipOrbit(rows[0],w,now),commit=clipOrbit(rows[1],w,now);
  assert.equal(w.dates[issue.last],"2026-11-25");assert.equal(w.dates[commit.first],"2026-11-25");assert.equal(commit.span,1);
- assert.equal(clipOrbit(rows[0],orbitWindow(now,7,30),now),null);
+ assert.equal(clipOrbit({...rows[0],startAt:"2026-12-01T00:00:00Z",endAt:"2026-12-02T00:00:00Z"},w,now),null);
 });
 test("multi-repo groups, case-insensitive search, type and status filters",()=>{
  const rows=["org/a","org/b"].flatMap(repo=>normalizeOrbit(repo,{issueList:[item,{...item,number:3,state:"closed",state_reason:"not_planned",closed_at:"2026-11-23T00:00:00Z"}]}));
@@ -32,4 +32,16 @@ test("multi-repo groups, case-insensitive search, type and status filters",()=>{
  assert.equal(orbitGroups(rows,w,now,{filter:"org/b",query:"DEV",status:"active"})[0].rows.length,1);
  assert.equal(orbitGroups(rows,w,now,{status:"complete"}).length,0);
  assert.equal(orbitGroups(rows,w,now,{status:"closed"})[0].rows[0].status,"closed");
+});
+
+test("global periods match Bangkok calendar and clip month/year boundaries",()=>{
+ const short=orbitWindow(now,"7"),long=orbitWindow(now,"30"),month=orbitWindow(now,"month"),year=orbitWindow(now,"year");
+ assert.equal(short.startDate,"2026-11-19");assert.equal(short.endDate,"2026-11-25");assert.equal(short.columns,7);
+ assert.equal(long.startDate,"2026-10-27");assert.equal(long.columns,30);
+ assert.equal(month.startDate,"2026-10-01");assert.equal(month.columns,56);assert.deepEqual(month.monthGroups.map(g=>g.span),[31,25]);
+ assert.equal(year.startDate,"2025-01-01");assert.equal(year.columns,23);assert.equal(year.unit,"month");assert.equal(year.today,"2026-11-01");assert.deepEqual(year.monthGroups,[]);
+ const rows=normalizeOrbit("org/a",{issueList:[{...item,created_at:"2024-12-31T00:00:00Z"}],milestones:[{...item,number:7,due_on:"2027-03-01T00:00:00Z"}],commits:[{sha:"b",commit:{message:"Month point",committer:{date:"2026-10-31T18:00:00Z"}}}]});
+ assert.deepEqual(clipOrbit(rows[0],year,now),{first:0,last:22,span:23,before:true,after:false});
+ const m=clipOrbit(rows[1],year,now);assert.equal(m.last,22);assert.equal(m.after,true);
+ assert.equal(clipOrbit(rows[2],year,now).first,22);assert.equal(clipOrbit(rows[2],year,now).span,1);
 });

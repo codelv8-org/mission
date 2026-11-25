@@ -28,14 +28,18 @@
 .orbit-controls label { color:var(--muted); font-size:11px; }
 .orbit-controls select,.orbit-controls input,.orbit-controls button { font-size:12px; min-height:34px; }
 .orbit-controls input { width:158px; max-width:100%; padding:6px 9px; border:1px solid var(--line); border-radius:8px; background:var(--paper); color:var(--ink); }
-.orbit-window-nav { display:flex; align-items:center; border:1px solid var(--line); background:var(--paper); border-radius:8px; min-width:0; }
-.orbit-window-nav button { border:0; background:transparent; color:var(--muted); padding:5px 9px; font-size:18px; }
-#orbit-window { font-size:11px; font-weight:650; padding:0 3px; white-space:nowrap; }
-.orbit-today-btn { border-color:var(--accent)!important; color:var(--deep)!important; }
+.orbit-period-label { display:flex; flex-wrap:wrap; gap:6px; align-items:center; min-width:0; font-size:12px; }
+#orbit-window { font-size:12px; font-weight:650; }
 .orbit-caption { display:flex; flex-wrap:wrap; justify-content:space-between; gap:6px; padding:0 18px 10px; color:var(--muted); font-size:11px; }
 .orbit-scroll { overflow:auto; max-height:590px; min-width:0; border-block:1px solid var(--line); scrollbar-gutter:stable; }
 .orbit-grid { width:100%; table-layout:fixed; border-collapse:separate; border-spacing:0; color:var(--ink); font-size:11px; }
-.orbit-days-7 { min-width:740px; }.orbit-days-14 { min-width:1110px; }.orbit-days-28 { min-width:2030px; }
+.orbit-grid { min-width:740px; }
+.orbit-daily .orbit-time-col { width:74px; }
+.orbit-monthly .orbit-time-col { width:108px; }
+.orbit-grid.orbit-grouped thead tr:first-child th { height:30px; }
+.orbit-grid.orbit-grouped thead tr:nth-child(2) th { top:30px; }
+.orbit-grid .orbit-month-group { font-weight:650; font-size:11px; }
+.orbit-weekday { font-size:10px; }
 .orbit-name-col { width:220px; }
 .orbit-grid th,.orbit-grid td { padding:0; border-right:1px solid var(--line); border-bottom:1px solid var(--line); }
 .orbit-grid thead th { position:sticky; top:0; z-index:4; height:49px; background:var(--surface); color:var(--muted); text-align:center; }
@@ -102,5 +106,5 @@
 .snapshot .orbit-pill,.snapshot .orbit-group-toggle { cursor:default; }
 @media(max-width:1050px) { .orbit-kpis { grid-template-columns:repeat(2,minmax(0,1fr)); } }
 @media(max-width:760px) { .orbit-name-col { width:166px; }.orbit-task-label { padding-left:8px; }.orbit-heading,.orbit-controls,.orbit-caption,.orbit-footer { padding-left:12px; padding-right:12px; }.orbit-controls select,.orbit-controls input,.orbit-controls button,.orbit-repo-chip { min-height:44px; }.orbit-detail-grid { grid-template-columns:repeat(2,minmax(0,1fr)); }.orbit-group-toggle .orbit-avatars { display:none; }.orbit-kpi { padding:10px; gap:7px; }.orbit-kpi-icon { width:29px; height:29px; } }
-@media(max-width:380px) { .orbit-kpi-copy strong { font-size:20px; }.orbit-controls input { width:132px; }.orbit-window-nav { max-width:100%; } }
+@media(max-width:380px) { .orbit-kpi-copy strong { font-size:20px; }.orbit-controls input { width:132px; } }
 @media(forced-colors:active) { .orbit-pill,.orbit-group-toggle,.orbit-repo-chip { border:1px solid ButtonText; }.orbit-pill[aria-pressed=true] { outline:2px solid Highlight; } }

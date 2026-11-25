@@ -1,5 +1,5 @@
 import {createGitHubClient,isFineGrainedPAT,validRepo,MAX_REPOS} from "./github-api.mjs";
-import {renderAnalytics,resetAnalytics} from "./analytics-view.mjs";
+import {renderAnalytics,renderActivityMatrix,resetAnalytics} from "./analytics-view.mjs";
 import {initOrbit,renderOrbit,resetOrbit,orbitScope} from "./orbit-view.mjs";
 import {initTheme} from "./theme.mjs";
 import {downloadSnapshot} from "./snapshot.mjs";
@@ -8,7 +8,7 @@ const $=id=>document.getElementById(id);
 initTheme();initOrbit();
 let token="",identity=null,data=null,request=null,expiryTimer=null,session=0;
 let available=[],selected=[],draft=new Set(),discoveryNote="";
-const state={view:"overview"};
+const state={view:"dashboard"};
 const safeDate = v => Number.isFinite(Date.parse(v)) ? new Date(v).toLocaleString("th-TH", {dateStyle:"medium",timeStyle:"short",timeZone:CALENDAR_ZONE}) : "—";
 function el(tag, cls, text) { const n=document.createElement(tag); if(cls)n.className=cls; if(text!==undefined)n.textContent=String(text); return n; }
 function link(title, href) {
@@ -23,7 +23,7 @@ function notice(msg){$("notice").hidden=!msg;$("notice").textContent=msg||"";}
 function canExport(){return !!token&&!!data&&Number.isFinite(Date.parse(data.fetchedAt))&&!request&&!$("workspace").hidden;}
 function updateExport(){$("download-html").disabled=!canExport();if(!canExport()&&$("snapshot-dialog").open)$("snapshot-dialog").close();}
 function exportScope(){
-  return {view:state.view,scope:$("repo-filter").selectedOptions[0]?.textContent||"All repositories",period:($("period").selectedOptions[0]?.textContent||"")+" · "+periodRange($("period").value,Date.parse(data.fetchedAt)).startDate+" – "+periodRange($("period").value,Date.parse(data.fetchedAt)).endDate+" · "+CALENDAR_ZONE,eventType:state.view==="dashboard"?[$("analytics-type").selectedOptions[0]?.textContent,orbitScope()].join(" · "):state.view==="activity"?orbitScope():"",fetchedAt:data?.fetchedAt};
+  return {view:state.view,scope:$("repo-filter").selectedOptions[0]?.textContent||"All repositories",period:($("period").selectedOptions[0]?.textContent||"")+" · "+periodRange($("period").value,Date.parse(data.fetchedAt)).startDate+" – "+periodRange($("period").value,Date.parse(data.fetchedAt)).endDate+" · "+CALENDAR_ZONE,eventType:state.view==="dashboard"?$("dashboard-type").selectedOptions[0]?.textContent:state.view==="activity"?[orbitScope(),"Matrix: "+$("analytics-type").selectedOptions[0]?.textContent].join(" · "):"",fetchedAt:data?.fetchedAt};
 }
 function openSnapshot(){
   if(!canExport())return;
@@ -42,10 +42,9 @@ function clearSession(msg="ออกจากระบบแล้ว"){
   if($("repo-dialog").open)$("repo-dialog").close();
   updateExport();$("snapshot-scope").textContent="";
   ["activity-list","priority-list","repo-list","repo-options"].forEach(id=>$(id).replaceChildren());
-  ["m-repos","m-commits","m-issues","m-priority"].forEach(id=>$(id).textContent="—");
   $("account-login").textContent="";$("updated").textContent="";$("repo-filter").replaceChildren(new Option("All repositories",""));
   $("repo-count").textContent="";$("repo-dialog-note").textContent="เลือกได้สูงสุด "+MAX_REPOS+" Repository ต่อการเชื่อมต่อ";$("repo-search").value="";$("repo-manual").value="";$("repo-selection-message").textContent="";$("pat-input").value="";
-  resetOrbit();resetAnalytics();switchView("overview");
+  resetOrbit();resetAnalytics();switchView("dashboard");
   notice("");$("workspace").hidden=true;$("login").hidden=false;$("refresh").disabled=false;$("github-login").disabled=false;$("add-repo").disabled=false;
   message(msg);
 }
@@ -168,10 +167,14 @@ function renderDashboard(){
   renderAnalytics(data,{names:selected,filter:$("repo-filter").value,period:$("period").value,onProject:name=>{if([...$("repo-filter").options].some(o=>o.value===name)){$("repo-filter").value=name;render();}}});
 }
 function renderProjectTimeline(){
-  renderOrbit(data,{names:selected,filter:$("repo-filter").value,onRepoChange:name=>{if([...$("repo-filter").options].some(o=>o.value===name)){$("repo-filter").value=name;render();}}});
+  renderOrbit(data,{names:selected,filter:$("repo-filter").value,period:$("period").value,onRepoChange:name=>{if([...$("repo-filter").options].some(o=>o.value===name)){$("repo-filter").value=name;render();}}});
+}
+function renderTimelinePage(){
+  renderProjectTimeline();
+  renderActivityMatrix(data,{names:selected,filter:$("repo-filter").value,period:$("period").value});
 }
 function render(){
-  if(state.view==="dashboard"||state.view==="activity")renderProjectTimeline();
+  if(state.view==="activity")renderTimelinePage();
   if(state.view==="dashboard")renderDashboard();
   if(!data)return;
   const filter=$("repo-filter").value,range=periodRange($("period").value,Number.isFinite(Date.parse(data.fetchedAt))?Date.parse(data.fetchedAt):Date.now());
@@ -180,13 +183,6 @@ function render(){
   const repos=data.repositories.filter(r=>match(r.name));
   const events=data.activity.filter(e=>match(e.repo)&&Date.parse(e.at)>=cutoff&&Date.parse(e.at)<=range.asOf);
   const issues=data.issues.filter(e=>match(e.repo)).sort((a,b)=>(a.blocked?0:a.rank+1)-(b.blocked?0:b.rank+1)||Date.parse(b.updatedAt)-Date.parse(a.updatedAt));
-  const gaps=[...data.errors,...(data.truncated||[])];
-  const issuesComplete=!gaps.some(e=>match(e.repo)&&(e.section==="issues"||e.section==="repository"));
-  const commitsComplete=!(Date.parse(data.historySince)>cutoff)&&!gaps.some(e=>match(e.repo)&&(e.section==="commits"||e.section==="repository"));
-  $("m-repos").textContent=repos.length;
-  $("m-commits").textContent=commitsComplete?events.filter(e=>e.type==="commit").length:events.filter(e=>e.type==="commit").length+"*";
-  $("m-issues").textContent=issues.length+(issuesComplete?"":"*");
-  $("m-priority").textContent=issues.filter(e=>e.blocked||e.rank<=1).length+(issuesComplete?"":"*");
   const act=$("activity-list"),prior=$("priority-list"),rl=$("repo-list");act.replaceChildren();prior.replaceChildren();rl.replaceChildren();
   for(const e of events) item(act,e.type,e.title,e.url,e.repo+" · "+e.type+(e.status?" · "+e.status:"")+" · "+safeDate(e.at),"event-"+(Object.hasOwn(EVENT_PATHS,e.type)?e.type:"fallback"));
   if(!events.length)empty(act,"ไม่มี Activity ที่โหลดได้ในช่วงเวลานี้");
@@ -196,22 +192,25 @@ function render(){
   if(!repos.length)empty(rl,"ไม่พบ Repository ที่โหลดสำเร็จ");
 }
 function switchView(view){
-  state.view=view;const names={overview:"Overview",dashboard:"Dashboard",activity:"Timeline",priority:"Priority",repositories:"Repositories"};
-  $("view-title").textContent=names[view];$("headline").textContent=view==="overview"?"Your work, in focus.":view==="dashboard"?"Plan the work. See the flow.":names[view];
-  $("view-description").textContent=view==="dashboard"?"วิเคราะห์กิจกรรมและสัญญาณของโปรเจกต์จากข้อมูล GitHub ที่โหลดได้":"ติดตามโปรเจกต์และวางแผนงานจากข้อมูลจริงบน GitHub";
-  $("metrics").hidden=view!=="overview";
+  const names={dashboard:"Dashboard",activity:"Timeline",priority:"Priority",repositories:"Repositories"};
+  if(!Object.hasOwn(names,view))view="dashboard";
+  state.view=view;
+  $("view-title").textContent=names[view];$("headline").textContent=view==="dashboard"?"Project Analytics Dashboard":names[view];
+  $("view-description").textContent=view==="dashboard"?"วิเคราะห์กิจกรรมและสัญญาณของโปรเจกต์จากข้อมูล GitHub ที่โหลดได้":view==="activity"?"ติดตามช่วงเวลาดำเนินงานและกิจกรรมจาก GitHub โดยใช้ Period กลาง":"ติดตามโปรเจกต์จากข้อมูลจริงบน GitHub";
   $("analytics").hidden=view!=="dashboard";
-  $("orbit").hidden=view!=="dashboard"&&view!=="activity";
-  if(view==="dashboard"||view==="activity")renderProjectTimeline();
+  $("orbit").hidden=view!=="activity";
+  $("activity-matrix").hidden=view!=="activity";
   $("panels").hidden=view==="dashboard";
+  ["activity","priority","repositories"].forEach(v=>$(v+"-panel").hidden=view!==v);
+  $("panels").classList.add("single");
   if(view==="dashboard")renderDashboard();
-  ["activity","priority","repositories"].forEach(v=>$(v+"-panel").hidden=view!=="overview"&&view!==v);
-  $("panels").classList.toggle("single",view!=="overview");
+  if(view==="activity")renderTimelinePage();
   document.querySelectorAll("[data-view]").forEach(b=>{const on=b.dataset.view===view;b.classList.toggle("active",on);if(on)b.setAttribute("aria-current","page");else b.removeAttribute("aria-current");});
 }
 
 document.querySelectorAll("[data-view]").forEach(b=>b.addEventListener("click",()=>switchView(b.dataset.view)));
-$("analytics-type").addEventListener("change",renderDashboard);
+$("dashboard-type").addEventListener("change",renderDashboard);
+$("analytics-type").addEventListener("change",()=>renderActivityMatrix(data,{names:selected,filter:$("repo-filter").value,period:$("period").value}));
 $("period").addEventListener("change",()=>{
   const needed=historyRequest($("period").value,data?.fetchedAt?Date.parse(data.fetchedAt):Date.now());
   render();
@@ -229,7 +228,7 @@ $("apply-repos").addEventListener("click",()=>{
   selected=available.filter(r=>draft.has(r.name.toLowerCase())).map(r=>r.name);
   $("repo-dialog").close();
   data=null;resetAnalytics();resetOrbit();updateExport();["activity-list","priority-list","repo-list"].forEach(id=>$(id).replaceChildren());
-  ["m-repos","m-commits","m-issues","m-priority"].forEach(id=>$(id).textContent="—");$("repo-filter").replaceChildren(new Option("All repositories",""));$("updated").textContent="";
+  $("repo-filter").replaceChildren(new Option("All repositories",""));$("updated").textContent="";
   load();
 });
 window.addEventListener("pagehide",()=>clearSession(""));

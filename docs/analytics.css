@@ -23,7 +23,8 @@
 .spark-point { fill:var(--accent); }
 #active-spark .spark-path { stroke:var(--chart-pull); } #active-spark .spark-point { fill:var(--chart-pull); }
 .spark-caption { display:block; font-size:10px; color:var(--muted); }
-.analysis-timeline { grid-column:span 7; }.analysis-trend { grid-column:span 5; }
+.activity-matrix { min-width:0; margin-bottom:20px; }
+.analysis-timeline { width:100%; min-width:0; }.analysis-trend { grid-column:1/-1; }
 .analysis-priority,.analysis-projects,.analysis-focus,.analysis-workflows { grid-column:span 6; }
 .analysis-heading { display:flex; align-items:flex-start; gap:8px; min-width:0; flex:1 1 auto; }
 .analysis-heading>div { min-width:0; }
@@ -137,3 +138,6 @@ button.heat-cell[aria-pressed="true"] { outline:2px solid var(--focus); outline-
 @media(forced-colors:active){.timeline-weekend{border:1px dashed CanvasText!important}.timeline-month-group{border:1px solid CanvasText}}
 
 .project-timeline.timeline-30 .timeline-date{min-width:44px}.project-timeline.timeline-monthly .timeline-date{min-width:62px}
+
+/* Full-width dashboard chart, compact height. */
+.analysis-trend .trend-svg { max-height:300px; }

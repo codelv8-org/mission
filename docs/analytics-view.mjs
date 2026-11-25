@@ -161,7 +161,8 @@ function renderWorkflows(model){
 export function resetAnalytics(){
   detail=null;setExpandedCard();
   for(const id of boxIds)$(id).replaceChildren();
-  $("analytics-type").value="all";
+  $("analytics-type").value="all";$("dashboard-type").value="all";
+  $("timeline-card").hidden=true;$("matrix-empty").hidden=false;
   $("timeline-clear").hidden=true;
   $("timeline-summary").hidden=true;
   $("timeline-clear").onclick=null;
@@ -172,7 +173,7 @@ export function resetAnalytics(){
 }
 export function renderAnalytics(data,{names=[],filter="",days=7,period=days,onProject=()=>{}}={}){
   if(!data){$("analytics-cards").hidden=true;$("analytics-empty").hidden=false;return;}
-  const model=analyzeSample(data,{names,filter,period,type:$("analytics-type").value});
+  const model=analyzeSample(data,{names,filter,period,type:$("dashboard-type").value});
   text("analytics-period",shortDate(model.startDate)+" – "+shortDate(model.endDate)+" · ICT (UTC+7) · "+(filter||"All monitored projects"));
   text("analytics-coverage",model.loadedCount+" / "+model.projects.length+" repositories loaded"+(model.errors.length?" · "+model.errors.length+" unavailable sections":"")+(model.limited.length?" · "+model.limited.length+" capped sections":"")+(model.coverageGap?" · ยังโหลดประวัติไม่ครบช่วงเวลา":"")+" · bounded sample");
   $("analytics-empty").hidden=model.projects.length>0;$("analytics-cards").hidden=!model.projects.length;
@@ -182,5 +183,14 @@ export function renderAnalytics(data,{names=[],filter="",days=7,period=days,onPr
   const all=model.type==="all"?model:analyzeSample(data,{names,filter,period,type:"all"});
   renderSparkline("active-spark",all.dates.map((_,i)=>all.projects.filter(p=>p.cells[i].events.length>0).length),all.dates,"Active repositories",all.activityPartial,all.unit);
   renderSparkline("events-spark",all.daily.map(d=>d.total),all.dates,"Observed events",all.activityPartial,all.unit);
-  renderTimeline(model);renderTrend(model);renderPriority(model);renderProjects(model,onProject);renderFocus(model);renderWorkflows(model);
+  renderTrend(model);renderPriority(model);renderProjects(model,onProject);renderFocus(model);renderWorkflows(model);
+}
+
+// The matrix belongs only to Timeline; the dashboard trend has an independent type filter.
+export function renderActivityMatrix(data,{names=[],filter="",period="7"}={}){
+  if(!data){$("timeline-card").hidden=true;$("matrix-empty").hidden=false;return;}
+  const model=analyzeSample(data,{names,filter,period,type:$("analytics-type").value});
+  $("timeline-card").hidden=!model.projects.length;$("matrix-empty").hidden=!!model.projects.length;
+  if(!model.projects.length){detail=null;$("project-timeline").replaceChildren();$("timeline-summary").replaceChildren();$("timeline-detail-list").replaceChildren();$("timeline-summary").hidden=true;return;}
+  renderTimeline(model);
 }
