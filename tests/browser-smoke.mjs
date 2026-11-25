@@ -8,7 +8,7 @@ import {join,resolve,extname} from "node:path";
 import {fileURLToPath,pathToFileURL} from "node:url";
 const root=fileURLToPath(new URL("../docs/",import.meta.url));
 const delay=ms=>new Promise(r=>setTimeout(r,ms));
-const wait=async(fn,label)=>{for(let i=0;i<100;i++){try{const result=await fn();if(result)return result;}catch{}await delay(100);}throw Error("Timed out: "+label);};
+const wait=async(fn,label,attempts=100)=>{for(let i=0;i<attempts;i++){try{const result=await fn();if(result)return result;}catch{}await delay(100);}throw Error("Timed out: "+label);};
 const chrome=process.env.CHROME_BIN||["google-chrome","chromium","chromium-browser"].find(name=>spawnSync("sh",["-c","command -v "+name],{stdio:"ignore"}).status===0);
 assert.ok(chrome,"Chromium/Chrome is required on the CI runner");
 const dir=await mkdtemp(join(tmpdir(),"mission-browser-"));
@@ -21,7 +21,8 @@ const server=createServer(async(req,res)=>{
 });
 await new Promise(r=>server.listen(0,"127.0.0.1",r));
 const url="http://127.0.0.1:"+server.address().port+"/";
-const proc=spawn(chrome,["--headless=new","--no-sandbox","--disable-dev-shm-usage","--disable-background-networking","--no-first-run","--remote-debugging-port=0","--user-data-dir="+dir,"about:blank"],{stdio:"ignore"});
+const proc=spawn(chrome,["--headless=new","--no-sandbox","--disable-dev-shm-usage","--disable-background-networking","--no-first-run","--remote-debugging-port=0","--user-data-dir="+dir,"about:blank"],{stdio:["ignore","ignore","pipe"]});
+let chromeLog="";proc.stderr.on("data",chunk=>{chromeLog=(chromeLog+String(chunk)).slice(-8000);});
 let ws;
 function installFixture(){
  window.fixtureRequests=0;
@@ -41,17 +42,19 @@ function installFixture(){
   if(!m||!names.includes(m[1]))throw Error("Unexpected fixture route");
   const name=m[1],i=names.indexOf(name),base="https://github.com/demo/"+name,tail=m[2]||"";
   if(!tail)return respond(repo(name));
-  if(tail==="/commits")return respond(Array.from({length:6},(_,j)=>({commit:{message:"Fixture commit "+(j+1),committer:{date:stamp(j,i)}},html_url:base+"/commit/"+j})));
+  if(tail==="/languages")return respond({PHP:2000,JavaScript:1000,TypeScript:500});
+  if(tail==="/contents")return respond([{name:"composer.json",type:"file"},{name:"frontend",type:"dir"},{name:"tests",type:"dir"},{name:"Dockerfile",type:"file"},{name:"SECURITY.md",type:"file"},{name:"database",type:"dir"}]);
+  if(tail==="/commits")return respond(Array.from({length:6},(_,j)=>({commit:{message:"Fixture commit "+(j+1)+(j===0?"\n\nAI-Agent: Codex":""),committer:{date:stamp(j,i)}},author:j===2?{login:"fixture-bot[bot]",type:"Bot"}:{login:"fixture-dev",type:"User"},html_url:base+"/commit/"+String(j).padStart(7,"0")})));
   const issue={title:"Fixture review task "+name,number:i+1,html_url:base+"/issues/"+(i+1),labels:[{name:["P0","P1","P2","P3","blocked"][i]}],created_at:stamp(5+i),updated_at:stamp(i%3,2),state:"open",assignees:[{login:"fixture-user"}]};
-  if(tail==="/issues")return respond([issue]);
-  if(tail==="/pulls")return respond([{title:"Fixture pull request",html_url:base+"/pull/1",created_at:stamp(4+i),updated_at:stamp(i%3,1),state:"open",number:1,user:{login:"fixture-reviewer"}}]);
+  if(tail==="/issues")return respond(url.searchParams.get("state")==="open"?[issue]:[issue,{...issue,number:i+50,title:"Fixture completed",html_url:base+"/issues/"+(i+50),state:"closed",state_reason:"completed",closed_at:stamp(1)}]);
+  if(tail==="/pulls")return respond([{title:"Fixture pull request",html_url:base+"/pull/1",created_at:stamp(4+i),updated_at:stamp(i%3,1),state:"open",number:1,user:{login:"fixture-reviewer"}},{title:"Fixture merged",number:2,html_url:base+"/pull/2",created_at:stamp(2),updated_at:stamp(1),merged_at:stamp(1),state:"closed",user:{login:"fixture-dev",type:"User"},labels:[{name:"ai-agent:claude-code"}]}]);
   if(tail==="/milestones")return respond([{number:1,title:"Fixture milestone "+name,html_url:base+"/milestone/1",created_at:stamp(9),due_on:new Date(today+86400000).toISOString(),state:"open",open_issues:2,closed_issues:3,creator:{login:"fixture-owner"}}]);
   if(tail==="/actions/runs")return respond({workflow_runs:[{name:"Fixture CI",html_url:base+"/actions/runs/1",updated_at:stamp(0,2),status:"completed",conclusion:i===1?"failure":"success"}]});
   throw Error("Unknown fixture route");
  };
 }
 try{
- const port=await wait(async()=>Number((await readFile(join(dir,"DevToolsActivePort"),"utf8")).split("\n")[0]),"Chrome devtools");
+ const port=await wait(async()=>Number((await readFile(join(dir,"DevToolsActivePort"),"utf8")).split("\n")[0]),"Chrome devtools",450).catch(e=>{throw Error(e.message+"; exit="+proc.exitCode+"; Chrome stderr:\n"+chromeLog);});
  const tabs=await (await fetch("http://127.0.0.1:"+port+"/json/list")).json();
  const page=tabs.find(t=>t.type==="page");assert.ok(page);
  ws=new WebSocket(page.webSocketDebuggerUrl);
@@ -67,7 +70,7 @@ try{
  await viewport(1440,1000);await send("Page.navigate",{url});await wait(()=>ev("document.readyState==='complete' && !!document.querySelector('#github-login')"),"login page");await noOverflow("desktop login");await shot("01-login-1440");
  await ev("document.querySelector('#pat-input').value='github_pat_'+'a'.repeat(40); document.querySelector('#github-login').click()");
  await wait(()=>ev("!document.querySelector('#workspace').hidden && !document.querySelector('#analytics-cards').hidden && !document.querySelector('#refresh').disabled && document.querySelectorAll('#repo-filter option').length===6"),"fixture login and dashboard data");
- assert.deepEqual(await ev("[...document.querySelectorAll('[data-view]')].map(b=>b.dataset.view)"),["dashboard","activity","priority","repositories"]);
+ assert.deepEqual(await ev("[...document.querySelectorAll('[data-view]')].map(b=>b.dataset.view)"),["dashboard","activity","analyze","priority","repositories"]);
  assert.equal(await ev("document.querySelector('[data-view].active').dataset.view"),"dashboard");
  assert.equal(await ev("document.querySelector('#orbit').hidden && document.querySelector('#activity-matrix').hidden && document.querySelector('#panels').hidden"),true);
  const layout=await ev("(()=>{const r=s=>document.querySelector(s).getBoundingClientRect();return {trend:r('.analysis-trend').top,trendWidth:r('.analysis-trend').width,bentoWidth:r('.analytics-bento').width,lower:['.analysis-priority','.analysis-projects','.analysis-focus','.analysis-workflows'].map(s=>r(s).top)}})()");
@@ -75,6 +78,48 @@ try{
  const material=await ev("(()=>{const s=getComputedStyle(document.querySelector('#analytics-active-card'));const body=getComputedStyle(document.body);return {bg:s.backgroundColor,border:s.borderTopWidth,ink:s.borderTopColor,shadow:s.boxShadow,radius:s.borderTopLeftRadius,image:s.backgroundImage,canvas:body.backgroundColor}})()");
  assert.equal(material.bg,"rgb(255, 255, 255)");assert.equal(material.border,"1px");assert.equal(material.ink,"rgb(226, 229, 236)");assert.equal(material.radius,"14px");assert.equal(material.image,"none");assert.equal(material.canvas,"rgb(244, 245, 248)");
  await noOverflow("1440 dashboard");await shot("02-dashboard-1440");
+ await ev("document.querySelector('[data-view=analyze]').click()");
+ assert.equal(await ev("!document.querySelector('#intelligence').hidden && !document.querySelector('#intel-cards').hidden && document.querySelector('#analytics').hidden && document.querySelector('#orbit').hidden && document.querySelector('#panels').hidden"),true);
+ assert.equal(await ev("document.querySelector('#intel-merged').textContent"),"5");
+ assert.equal(await ev("document.querySelector('#intel-closed').textContent"),"5");
+ assert.equal(await ev("document.querySelector('#intel-cycle').textContent"),"24 h");
+ assert.equal(await ev("document.querySelector('#intel-rate').textContent"),"80%");
+ assert.equal(await ev("document.querySelectorAll('#intel-stack tbody tr').length"),5);
+ assert.equal(await ev("document.querySelectorAll('#intel-heat .intel-heat-cell').length"),7);
+ assert.ok(await ev("document.querySelector('#intel-languages').textContent.includes('PHP') && document.querySelector('#intel-radar svg')!==null"));
+ assert.ok(await ev("document.querySelector('#intel-agents').textContent.includes('Codex') && document.querySelector('#intel-agents').textContent.includes('Unattributed') && document.querySelector('#intel-agents').textContent.includes('Bot (provider unknown)')"));
+ assert.equal(await ev("document.querySelector('#intel-contrib-declared').textContent"),"5");
+ await ev("document.querySelector('#intel-contribution-kind').value='merged_pr';document.querySelector('#intel-contribution-kind').dispatchEvent(new Event('change'))");
+ assert.equal(await ev("document.querySelector('#intel-contrib-total').textContent"),"5");assert.ok(await ev("document.querySelector('#intel-agents').textContent.includes('Claude Code') && document.querySelector('#intel-agents').textContent.includes('24 h')"));
+ await ev("document.querySelector('#intel-contributor').value='login:fixture-dev';document.querySelector('#intel-contributor').dispatchEvent(new Event('change'))");
+ assert.ok(await ev("document.querySelector('#intel-contribution-scope').textContent.includes('@fixture-dev')"));
+ assert.equal(await ev("document.querySelectorAll('#intel-evidence tbody tr').length"),5);
+ await ev("document.querySelector('#intel-contribution-kind').value='commit';document.querySelector('#intel-contribution-kind').dispatchEvent(new Event('change'))");
+ assert.equal(await ev("document.querySelector('#intel-contributor').value"),"all");
+ assert.equal(await ev("document.querySelectorAll('#intel-compare tbody tr').length"),6);
+ assert.equal(await ev("document.querySelectorAll('#intel-insight-summary .intel-insight-kpi').length"),4);
+ assert.ok(await ev("document.querySelector('#intel-insight-list').textContent.includes('Inspect unsuccessful workflow runs')"));
+ assert.equal(await ev("document.querySelectorAll('#intel-practice-review tbody tr').length"),4);
+ await ev("document.querySelector('#intel-insight-filter').value='act';document.querySelector('#intel-insight-filter').dispatchEvent(new Event('change'))");
+ assert.ok(await ev("[...document.querySelectorAll('#intel-insight-list article')].length>0 && [...document.querySelectorAll('#intel-insight-list article')].every(x=>x.classList.contains('insight-act'))"));
+ await ev("document.querySelector('#intel-insight-filter').value='all';document.querySelector('#intel-insight-filter').dispatchEvent(new Event('change'))");
+ if(await ev("!document.querySelector('#intel-insight-more').hidden")){const before=await ev("document.querySelectorAll('#intel-insight-list article').length");await ev("document.querySelector('#intel-insight-more').click()");assert.ok(await ev("document.querySelectorAll('#intel-insight-list article').length")>before);}
+
+ await noOverflow("1440 Analyze");await shot("13-analyze-1440");
+ await ev("document.querySelector('#repo-filter').value='demo/mission';document.querySelector('#repo-filter').dispatchEvent(new Event('change'))");
+ assert.equal(await ev("document.querySelector('#intel-merged').textContent"),"1");assert.equal(await ev("document.querySelectorAll('#intel-stack tbody tr').length"),1);
+ await ev("document.querySelector('#period').value='30';document.querySelector('#period').dispatchEvent(new Event('change'))");
+ assert.equal(await ev("document.querySelectorAll('#intel-heat .intel-heat-cell').length"),30);
+ assert.ok(await ev("document.querySelector('#intel-compare-note').textContent.includes('ยังโหลดไม่ครบ')"));
+ const requestsBeforeCompare=await ev("window.fixtureRequests");
+ await ev("document.querySelector('#intel-load-comparison').click()");
+ await wait(()=>ev("!document.querySelector('#refresh').disabled && !document.querySelector('#download-html').disabled"),"comparison history loaded");
+ assert.ok(await ev("window.fixtureRequests")>requestsBeforeCompare);
+ assert.ok(await ev("!document.querySelector('#intel-compare-note').textContent.includes('ยังโหลดไม่ครบ')"));
+ const analyzeHTML=await ev("import('./snapshot.mjs').then(m=>m.buildSnapshot({view:'analyze',scope:'demo/mission',period:'Last 30 days',fetchedAt:new Date().toISOString()}))");
+ assert.ok(analyzeHTML.includes('id="intel-insight-list"')&&analyzeHTML.includes('id="intel-practice-review"')&&!analyzeHTML.includes('id="intel-insight-filter"')&&analyzeHTML.includes('id="intel-agents"')&&analyzeHTML.includes('id="intel-compare"')&&!analyzeHTML.includes('id="intel-contribution-kind"')&&!analyzeHTML.includes('id="intel-load-comparison"')&&analyzeHTML.includes('id="intel-stack"')&&analyzeHTML.includes('Engineering Evidence Radar')&&!analyzeHTML.includes('id="analytics"')&&!analyzeHTML.includes('id="orbit-grid"')&&!analyzeHTML.includes('demo/workspace'));
+ await ev("document.querySelector('#repo-filter').value='';document.querySelector('#repo-filter').dispatchEvent(new Event('change'));document.querySelector('#period').value='7';document.querySelector('#period').dispatchEvent(new Event('change'));document.querySelector('[data-view=dashboard]').click()");
+
  assert.equal(await ev("document.querySelectorAll('.kpi-spark svg').length"),2);
  await ev("document.querySelector('#workspace-theme').value='dark';document.querySelector('#workspace-theme').dispatchEvent(new Event('change'))");
  assert.equal(await ev("document.documentElement.dataset.theme"),"dark");
@@ -165,6 +210,7 @@ try{
  await ev("document.querySelector('#project-timeline button[data-day]').click()");
  assert.equal(await ev("document.querySelector('#timeline-summary').children.length"),4);
  await noOverflow("Last Year timeline");await shot("11-last-year-1440");
+ await ev("document.querySelector('[data-view=analyze]').click()");assert.equal(await ev("document.querySelectorAll('#intel-heat .intel-heat-cell').length"),localYear.dates.length);assert.equal(await ev("document.querySelector('#intel-heat-unit').textContent"),"Monthly");await noOverflow("Last Year Analyze");await ev("document.querySelector('[data-view=activity]').click()");
  await ev("document.querySelector('#period').value='7';document.querySelector('#period').dispatchEvent(new Event('change'))");
  assert.equal(await ev("document.querySelectorAll('#project-timeline thead .timeline-date').length"),7);
  assert.equal(await ev("document.querySelectorAll('#orbit-grid .orbit-date').length"),7);
@@ -174,6 +220,7 @@ try{
  for(const [w,h] of [[1024,768],[768,1024],[375,812],[812,375]]){
    await viewport(w,h);await delay(150);await noOverflow(w+"x"+h+" dashboard");assert.equal(await ev("document.querySelector('#analytics').hidden"),false);
    await ev("document.querySelector('[data-view=activity]').click()");await noOverflow(w+"x"+h+" timeline");assert.equal(await ev("document.querySelectorAll('#orbit-grid .orbit-date').length"),7);
+   await ev("document.querySelector('[data-view=analyze]').click()");await noOverflow(w+"x"+h+" Analyze");if(w===375)await shot("14-analyze-375");
    await ev("document.querySelector('[data-view=dashboard]').click()");
    if(w===375){await shot("03-dashboard-375");await ev("document.querySelector('#manage-repos').click()");assert.equal(await ev("document.querySelector('#repo-dialog').open"),true);await noOverflow("mobile repository dialog");await shot("04-dialog-375");await ev("document.querySelector('#close-repos').click()");assert.equal(await ev("document.querySelector('#repo-dialog').open"),false);}
  }
@@ -181,10 +228,11 @@ try{
  await send("Emulation.setEmulatedMedia",{features:[{name:"prefers-reduced-motion",value:"reduce"},{name:"prefers-color-scheme",value:"dark"}]});
  await wait(()=>ev("document.documentElement.dataset.theme==='dark'"),"system dark");
  await viewport(375,812);await noOverflow("dark mobile dashboard");await shot("06-dashboard-dark-375");
+ await ev("document.querySelector('[data-view=analyze]').click()");await noOverflow("dark mobile Analyze");await shot("15-analyze-dark-375");
  await ev("document.querySelector('#manage-repos').click()");await noOverflow("dark mobile dialog");await shot("07-dialog-dark-375");await ev("document.querySelector('#close-repos').click()");
  assert.equal(await ev("getComputedStyle(document.querySelector('#refresh')).transitionDuration"),"0s");
  await ev("document.querySelector('#logout').click()");
- assert.equal(await ev("document.querySelector('#analytics-cards').hidden && document.querySelector('#orbit-detail').hidden && document.querySelectorAll('#orbit-grid .orbit-task-row').length===0 && document.querySelector('#timeline-summary').children.length===0 && document.querySelector('#pat-input').value==='' && document.querySelector('#workspace').hidden"),true);
+ assert.equal(await ev("document.querySelector('#intel-cards').hidden && document.querySelector('#intel-stack').children.length===0 && document.querySelector('#intel-evidence').children.length===0 && document.querySelector('#intel-insight-list').children.length===0 && document.querySelector('#intel-insight-filter').value==='all' && document.querySelector('#intel-contributor').options.length===1 && document.querySelector('#analytics-cards').hidden && document.querySelector('#orbit-detail').hidden && document.querySelectorAll('#orbit-grid .orbit-task-row').length===0 && document.querySelector('#timeline-summary').children.length===0 && document.querySelector('#pat-input').value==='' && document.querySelector('#workspace').hidden"),true);
  await viewport(375,812);await noOverflow("mobile login");
  assert.equal(await ev("document.querySelector('#download-html').disabled"),true);
  assert.equal(await ev("document.querySelector('#snapshot-scope').textContent"),"");

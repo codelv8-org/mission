@@ -31,7 +31,19 @@ export function monthGroups(dates){
   for(const date of dates){const key=date.slice(0,7);const last=groups.at(-1);if(last?.key===key)last.span++;else groups.push({key,date:key+"-01",span:1});}
   return groups;
 }
-export function historyRequest(value,now=Date.now()){
+// Previous calendar window of the same elapsed duration, including
+// the same number of ICT calendar dates and equivalent time-of-day on its last day.
+export function previousPeriodRange(range){
+  const elapsed=range.asOf-range.start+1,days=Math.round((Date.parse(range.endDate+"T00:00:00Z")-Date.parse(range.startDate+"T00:00:00Z"))/DAY)+1;
+  const start=range.start-days*DAY,asOf=start+elapsed-1,startDate=calendarDay(start),endDate=calendarDay(asOf),dates=[];
+  if(range.unit==="month"){
+    const d=new Date(startDate+"T00:00:00Z"),end=Date.parse(endDate+"T00:00:00Z");
+    for(let m=Date.UTC(d.getUTCFullYear(),d.getUTCMonth(),1);m<=end;){dates.push(iso(m));const x=new Date(m);m=Date.UTC(x.getUTCFullYear(),x.getUTCMonth()+1,1);}
+  }else for(let i=0;i<days;i++)dates.push(calendarDay(start+i*DAY));
+  return {...range,start,asOf,startDate,endDate,dates};
+}
+export function historyRequest(value,now=Date.now(),{compare=false}={}){
   const period=normalizePeriod(value),range=periodRange(period,now),base=periodRange("30",now);
-  return {since:new Date(Math.min(range.start,base.start)).toISOString(),pages:period==="year"?5:period==="month"?3:1};
+  const pages=period==="year"?5:period==="month"?3:1;
+  return {since:new Date(Math.min(range.start,base.start,compare?previousPeriodRange(range).start:Infinity)).toISOString(),pages:compare?Math.max(pages,period==="month"||period==="year"?5:3):pages};
 }

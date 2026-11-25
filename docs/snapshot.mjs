@@ -4,8 +4,8 @@ const HTML_TAGS=new Set("div aside main section article header footer nav p h1 h
 const SVG_TAGS=new Set("svg g path rect circle polyline polygon line text title desc".split(" "));
 const HTML_ATTRS=new Set("id class role title aria-label aria-current aria-pressed scope colspan rowspan span min max value".split(" "));
 const SVG_ATTRS=new Set("class role aria-label aria-hidden focusable viewBox preserveAspectRatio width height x y x1 y1 x2 y2 cx cy r rx ry d points fill stroke stroke-width stroke-linecap stroke-linejoin stroke-dasharray opacity fill-opacity text-anchor font-size font-weight transform".split(" "));
-const OMIT=".toolbar-actions,.account,.skip-link,.analysis-controls,.expand-card,#timeline-clear,.orbit-controls,.orbit-repos,.orbit-more,.orbit-clear,.nav:not(.active)";
-const STYLES=["style.css","auth.css","analytics.css","orbit.css"];
+const OMIT=".toolbar-actions,.account,.skip-link,.analysis-controls,.intel-local-controls,.expand-card,#timeline-clear,.orbit-controls,.orbit-repos,.orbit-more,.orbit-clear,.nav:not(.active)";
+const STYLES=["style.css","auth.css","analytics.css","orbit.css","intelligence.css"];
 export const SNAPSHOT_CSP="default-src 'none'; script-src 'none'; connect-src 'none'; style-src 'unsafe-inline'; img-src 'none'; font-src 'none'; object-src 'none'; frame-src 'none'; base-uri 'none'; form-action 'none'";
 export function redact(value,secret=""){
   let s=String(value??"");
@@ -13,7 +13,7 @@ export function redact(value,secret=""){
   return s.replace(/\b(?:github_pat_|gh[pousr]_)[a-zA-Z0-9_]{16,}/g,"[REDACTED]");
 }
 export function snapshotFilename(view,now=new Date()){
-  const safe=["dashboard","activity","priority","repositories"].includes(view)?view:"workspace";
+  const safe=["dashboard","activity","analyze","priority","repositories"].includes(view)?view:"workspace";
   return "mission-"+safe+"-"+now.toISOString().replace(/[:.]/g,"-")+".html";
 }
 function styleText(source){
